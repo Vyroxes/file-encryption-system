@@ -243,4 +243,23 @@ Integration of the progress bar with the Windows taskbar.
 
 ---
 
+## 🧠 Future Improvements
+
+- Introduction of a structured metadata header embedded within encrypted files, containing information about the selected algorithm, mode of operation, key parameters, and cryptographic settings. This would enable automatic configuration of decryption options upon file selection, improving usability and reducing the risk of incorrect parameter selection.
+- Expansion of supported cryptographic algorithms, including modern and standardized solutions (e.g., additional AEAD modes, post-quantum algorithms in the future), to increase flexibility and adaptability of the system.
+- Extension of configurable cryptographic parameters, such as nonce/IV size, tag length, key derivation settings (e.g., PBKDF2/Argon2), and security levels, allowing more advanced control for experienced users.
+- Full implementation of digital signature mechanisms independent of encryption, enabling file authenticity verification (e.g., detached signatures, signature-only mode).
+- Implementation of streaming-based encryption and decryption (chunked processing), allowing efficient handling of very large files without excessive RAM usage.
+- Refactoring of the monolithic application architecture into modular components (separate files/modules for GUI, cryptography, file handling, and utilities), improving maintainability, scalability, and testability of the codebase.
+- User interface improvements, including better UX consistency, enhanced feedback mechanisms, improved error handling, and more intuitive configuration flows.
+- Internationalization (i18n) support with dynamic language switching, enabling the application to be used in multiple languages.
+
+---
+
+## 📄 License
+
+This project is for educational and portfolio purposes.
+
+---
+
 📌 **Author:** *Michał Rusek (Vyroxes)*

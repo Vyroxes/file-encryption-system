@@ -243,4 +243,23 @@ Integracja paska postępu z paskiem zadań (Windows).
 
 ---
 
+## 🧠 Możliwe kierunki rozwoju
+
+- Wprowadzenie ustrukturyzowanego nagłówka metadanych osadzonego w zaszyfrowanych plikach, zawierającego informacje o wybranym algorytmie, trybie pracy, parametrach klucza oraz ustawieniach kryptograficznych. Umożliwi to automatyczne dopasowanie opcji deszyfrowania po wybraniu pliku, poprawiając wygodę użytkowania i minimalizując ryzyko błędnej konfiguracji.
+- Rozszerzenie obsługiwanych algorytmów kryptograficznych o nowoczesne i standaryzowane rozwiązania (np. dodatkowe tryby AEAD, a w przyszłości algorytmy post-kwantowe), w celu zwiększenia elastyczności i możliwości adaptacji systemu.
+- Rozbudowa konfigurowalnych parametrów kryptograficznych, takich jak rozmiar nonce/IV, długość tagu uwierzytelniającego, ustawienia derivacji klucza (np. PBKDF2/Argon2) oraz poziomy bezpieczeństwa, co pozwoli na bardziej zaawansowaną kontrolę dla doświadczonych użytkowników.
+- Pełna implementacja mechanizmów podpisu cyfrowego niezależnych od szyfrowania, umożliwiających weryfikację autentyczności plików (np. podpisy odłączone, tryb wyłącznie podpisu).
+- Implementacja szyfrowania i deszyfrowania w trybie strumieniowym (przetwarzanie fragmentami), co pozwoli na efektywną obsługę bardzo dużych plików bez nadmiernego zużycia pamięci RAM.
+- Refaktoryzacja monolitycznej architektury aplikacji do postaci modułowej (oddzielne pliki/moduły dla GUI, kryptografii, obsługi plików oraz narzędzi pomocniczych), co poprawi utrzymanie, skalowalność oraz testowalność kodu.
+- Ulepszenia interfejsu użytkownika, w tym większa spójność UX, lepsze mechanizmy informacji zwrotnej, poprawiona obsługa błędów oraz bardziej intuicyjne ścieżki konfiguracji.
+- Wsparcie internacjonalizacji (i18n) z możliwością dynamicznej zmiany języka, umożliwiające korzystanie z aplikacji w wielu językach.
+
+---
+
+## 📄 Licencja
+
+Projekt ma charakter edukacyjny i służy celom portfolio.
+
+---
+
 📌 **Autor:** *Michał Rusek (Vyroxes)*
