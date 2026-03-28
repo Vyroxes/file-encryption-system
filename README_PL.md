@@ -243,4 +243,16 @@ Integracja paska postępu z paskiem zadań (Windows).
 
 ---
 
+## 🧠 Możliwe kierunki rozwoju
+
+- ...
+
+---
+
+## 📄 Licencja
+
+Projekt ma charakter edukacyjny i służy celom portfolio.
+
+---
+
 📌 **Autor:** *Michał Rusek (Vyroxes)*

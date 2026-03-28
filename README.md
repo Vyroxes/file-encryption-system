@@ -243,4 +243,16 @@ Integration of the progress bar with the Windows taskbar.
 
 ---
 
+## 🧠 Future Improvements
+
+- ...
+
+---
+
+## 📄 License
+
+This project is for educational and portfolio purposes.
+
+---
+
 📌 **Author:** *Michał Rusek (Vyroxes)*
