@@ -222,23 +222,34 @@ Integration of the progress bar with the Windows taskbar.
 
   Build command:
   ``` bash
-  pyinstaller --onefile --windowed --icon="assets/icon.ico" --name="File Encryption and Decryption" --add-data="assets/icon.ico;assets" "main.py"
+  python -m PyInstaller --onefile --windowed --icon="assets/icon.ico" --name="File Encryption and Decryption" --add-data="assets/icon.ico;assets" "main.py"
   ```
   
   Install PyInstaller:
   ```bash
-  pip install PyInstaller==6.18.0
+  python -m pip install PyInstaller==6.18.0
   ```
 
 ### 🔹 **Installing dependencies**
+
+  It is recommended to create a Python 3.10 virtual environment:
+  ```bash
+  py -3.10 -m venv .venv
+  ```
+
+  Activate the environment in PowerShell:
+  ```bash
+  .\.venv\Scripts\Activate.ps1
+  ```
+
   You can install them individually with specific versions:
   ```bash
-  pip install PyQt5==5.15.11 PyCryptodome==3.23.0 PySkein==1.0 psutil==7.2.2
+  python -m pip install PyQt5==5.15.11 PyCryptodome==3.23.0 PySkein==1.0 psutil==7.2.2
   ```
 
   Or using `requirements.txt`:
   ```bash
-  pip install -r requirements.txt
+  python -m pip install -r requirements.txt
   ```
 
 ---

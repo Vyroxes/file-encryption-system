@@ -222,23 +222,34 @@ Integracja paska postępu z paskiem zadań (Windows).
 
   Komenda do zbudowania aplikacji:
   ``` bash
-  pyinstaller --onefile --windowed --icon="assets/icon.ico" --name="Szyfrowanie i deszyfrowanie plików" --add-data="assets/icon.ico;assets" "main.py"
+  python -m PyInstaller --onefile --windowed --icon="assets/icon.ico" --name="Szyfrowanie i deszyfrowanie plików" --add-data="assets/icon.ico;assets" "main.py"
   ```
   
   Instalacja narzędzia PyInstaller:
   ```bash
-  pip install PyInstaller==6.18.0
+  python -m pip install PyInstaller==6.18.0
   ```
 
 ### 🔹 **Instalacja zależności**
+
+  Zalecane jest utworzenie wirtualnego środowiska Python 3.10:
+  ```bash
+  py -3.10 -m venv .venv
+  ```
+
+  Aktywacja środowiska w PowerShell:
+  ```bash
+  .\.venv\Scripts\Activate.ps1
+  ```
+
   Można je zainstalować pojedynczo z określoną wersją:
   ```bash
-  pip install PyQt5==5.15.11 PyCryptodome==3.23.0 PySkein==1.0 psutil==7.2.2
+  python -m pip install PyQt5==5.15.11 PyCryptodome==3.23.0 PySkein==1.0 psutil==7.2.2
   ```
 
   Lub za pomocą pliku `requirements.txt`:
   ```bash
-  pip install -r requirements.txt
+  python -m pip install -r requirements.txt
   ```
 
 ---
