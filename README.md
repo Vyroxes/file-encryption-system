@@ -22,8 +22,8 @@ The system allows encryption and decryption of various types of files (text, ima
 
 ## 🛠️ Technologies
 
-- Python 3.10.
-- PyQt5 – graphical user interface (GUI).
+- Python 3.12.
+- PySide6 – graphical user interface (GUI).
 - PyCryptodome – implementation of cryptographic algorithms.
 - PySkein – implementation of the Skein cryptographic primitive (Threefish).
 - psutil – system resource monitoring.

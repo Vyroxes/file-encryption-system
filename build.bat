@@ -1,15 +1,22 @@
 @echo off
-chcp 65001
+chcp 65001 >nul
 
 set NAME=Szyfrowanie i deszyfrowanie plików
 set FOLDER=dist\%NAME%
-set ICON=icon.ico
+set ICON=assets/icon.ico
 set MAIN_SCRIPT=main.py
+set "PYTHON=.venv\Scripts\python.exe"
 
-pyinstaller --windowed --icon="%ICON%" --name="%NAME%" --add-data="%ICON%;." "%MAIN_SCRIPT%"
-xcopy /E /I /Y lang "%FOLDER%\lang"
-xcopy /E /I /Y theme "%FOLDER%\theme"
-copy /Y TaskbarLib.tlb "%FOLDER%\"
+if errorlevel 1 (
+    echo.
+    echo Build failed.
+    pause
+    exit /b 1
+)
+
+xcopy /E /I /Y "lang" "%FOLDER%\lang"
+xcopy /E /I /Y "theme" "%FOLDER%\theme"
+
 powershell -Command "Compress-Archive -Path '%FOLDER%\*' -DestinationPath '%NAME%.zip' -Force"
 
 pause

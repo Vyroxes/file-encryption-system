@@ -1,4 +1,9 @@
-PyQt5==5.15.11
+PySide6==6.11.2
+PyTaskbar==0.1.1
+darkdetect==0.8.0
 PyCryptodome==3.23.0
 PySkein==1.0
+pyserpent==1.2.0
+xycrypto==0.9
+ascon==0.0.9
 psutil==7.2.2

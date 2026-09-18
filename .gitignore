@@ -11,9 +11,16 @@ dist/
 *.png
 *.tmp
 venv/
+.venv/
 .env/
+*.env
 *.pdf
 *.docx
 *.py
 !main.py
+!GUI.py
+!Algorithms.py
 .vscode/
+*.rar
+*.zip
+*.exe

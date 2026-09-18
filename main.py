@@ -10,7 +10,7 @@ if __name__ == "__main__":
         application_path = sys._MEIPASS
     elif __file__:
         application_path = os.path.dirname(__file__)
-    icon_path = os.path.join(application_path, "icon.ico")
+    icon_path = os.path.join(application_path, "assets", "icon.ico")
     window = MainWindow()
     window.setWindowIcon(QIcon(icon_path))
     window.show()
