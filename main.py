@@ -1024,7 +1024,8 @@ class FileLabel(QLabel):
 class FileEncryptor(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon("icon.png"))
+        icon_path = os.path.join(application_path, "assets", "icon.ico")
+        self.setWindowIcon(QIcon(icon_path))
         self.settings = QSettings("Vyroxes", "Szyfrowanie i deszyfrowanie plików")
         self.recent_files = self.settings.value("recent_files", [], type=list)
         self.recent_keys = self.settings.value("recent_keys", [], type=list)
@@ -2593,7 +2594,7 @@ if __name__ == "__main__":
         application_path = sys._MEIPASS
     elif __file__:
         application_path = os.path.dirname(__file__)
-    icon_path = os.path.join(application_path, "icon.ico")
+    icon_path = os.path.join(application_path, "assets", "icon.ico")
     app.setWindowIcon(QIcon(icon_path))
     window = FileEncryptor()
     window.setWindowIcon(QIcon(icon_path))

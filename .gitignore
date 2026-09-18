@@ -1,4 +1,5 @@
 __pycache__/
+*.exe
 *.pyc
 *.pyo
 build/
@@ -11,8 +12,10 @@ dist/
 *.jpg
 *.png
 *.tmp
+.venv/
 venv/
 .env/
+*.env
 *.pdf
 *.docx
 *.py

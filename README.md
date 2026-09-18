@@ -222,7 +222,7 @@ Integration of the progress bar with the Windows taskbar.
 
   Build command:
   ``` bash
-  pyinstaller --onefile --windowed --icon=icon.ico --name="File Encryption and Decryption" --add-data="icon.ico;." "main.py"
+  pyinstaller --onefile --windowed --icon="assets/icon.ico" --name="File Encryption and Decryption" --add-data="assets/icon.ico;assets" "main.py"
   ```
   
   Install PyInstaller:

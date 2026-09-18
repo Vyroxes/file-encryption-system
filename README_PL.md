@@ -222,7 +222,7 @@ Integracja paska postępu z paskiem zadań (Windows).
 
   Komenda do zbudowania aplikacji:
   ``` bash
-  pyinstaller --onefile --windowed --icon=icon.ico --name="Szyfrowanie i deszyfrowanie plików" --add-data="icon.ico;." "main.py"
+  pyinstaller --onefile --windowed --icon="assets/icon.ico" --name="Szyfrowanie i deszyfrowanie plików" --add-data="assets/icon.ico;assets" "main.py"
   ```
   
   Instalacja narzędzia PyInstaller:
