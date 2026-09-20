@@ -33,7 +33,7 @@ QComboBox, QComboBox:focus  {
 }
 
 QLabel#historyLabel {
-    padding: 4px 5px;
+    padding: 8px 4px;
 }
 
 QComboBox::drop-down {
@@ -87,15 +87,27 @@ QPushButton#clearButton:disabled, QPushButton:disabled, QComboBox:disabled {
 }
 
 QPushButton#removeHistoryButton {
+    padding: 0;
     background: transparent;
     border: none;
-    font-size: 30px;
+    border-radius: none;
+    font-size: 24px;
     color: #ff5555;
 }
 
 QPushButton#removeHistoryButton:hover {
+    padding: 0;
+    background-color: #d1d1d1;
+    border: none;
+    border-radius: none;
     font-size: 24px;
     color: #ff7777;
+}
+
+QMenu::separator {
+    height: 1px;
+    margin: 0;
+    background-color: #a6a6a6;
 }
 
 QMenu {

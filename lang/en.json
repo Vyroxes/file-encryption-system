@@ -123,6 +123,8 @@
   "operations.error.9": "Algorithm not supported.",
   "operations.error.10": "Operation not supported.",
   "operations.error.11": "Mode not supported.",
+  "operations.error.12": "Selected algorithm does not match the encrypted file metadata. Expected: $. Selected: #.",
+  "operations.error.13": "Selected algorithm setting '$' does not match the encrypted file metadata. Expected: #. Selected: @.",
 
   "path": "Path: ",
   "size": "Size: ",

@@ -6,9 +6,9 @@ warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 import os
 import sys
 import json
-import re
 from time import time
 from psutil import Process
+from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QComboBox, QProgressBar,
     QGroupBox, QDialog, QSizePolicy, QMessageBox, QMenu, QWidgetAction, QTabWidget, QSpinBox
@@ -16,7 +16,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QSettings, QTimer, Signal, QLocale
 from PyTaskbar import ProgressType, TaskbarProgress
 import darkdetect
-from Algorithms import ALGORITHMS, CryptoWorker, generate_key
+from algorithms import ALGORITHMS
+from crypto_worker import CryptoWorker
+from key_manager import generate_key
+from file_format import read_header
 
 class MainWindow(QMainWindow):
     settings = QSettings("Vyroxes", "File Encryption and Decryption")
@@ -37,6 +40,10 @@ class MainWindow(QMainWindow):
         self._crypto_start_time = None
         self._memory_timer = QTimer()
         self._memory_timer.timeout.connect(self._sample_memory)
+
+        self._history_menu = None
+        self._history_menu_button = None
+        self._ignore_history_button = None
 
         if sys.platform == "win32":
             hwnd = int(self.winId())
@@ -368,6 +375,20 @@ class MainWindow(QMainWindow):
                 right_column.addWidget(mode_label)
                 right_column.addWidget(self.mode_combo)
 
+            if algorithm_name == "AES":
+                def sync_aes_key_lengths(mode_name):
+                    key_lengths = algorithm.get("mode_key_lengths", {}).get(
+                        mode_name,
+                        algorithm.get("key_lengths", [])
+                    )
+
+                    self.key_lengths_combo.clear()
+                    self.key_lengths_combo.addItems([str(k) for k in key_lengths])
+                    self.key_lengths_combo.setCurrentIndex(0)
+
+                sync_aes_key_lengths(self.mode_combo.currentText())
+                self.mode_combo.currentTextChanged.connect(sync_aes_key_lengths)
+
             if algorithm_name == "ASCON":
                 self.key_lengths_combo.setEnabled(False)
 
@@ -489,20 +510,16 @@ class MainWindow(QMainWindow):
         except OSError:
             return "—"
 
-    def load_metadata_from_enc(self, file_path: str) -> dict:
+    def load_metadata_from_enc(self, file_path: str) -> tuple[dict, dict]:
         try:
-            with open(file_path, "rb") as f:
-                head = f.read(1024)
-            head_str = head.decode("utf-8", errors="ignore")
+            with open(file_path, "rb") as file:
+                metadata, _ = read_header(file, lang=self.lang)
 
-            match = re.search(r"\{.*?\}", head_str)
-            if match:
-                meta_json = match.group(0) + "}"
-                meta = json.loads(meta_json)
-                return meta, meta.get("params", {})
-        except Exception as e:
-            QMessageBox.warning(self, self.lang.t("warning"), self.lang.t("file.error.8") + str(e))
-        return {}, {}
+            return metadata, metadata.get("params", {})
+
+        except Exception as exc:
+            QMessageBox.warning(self, self.lang.t("warning"), str(exc))
+            return {}, {}
 
     def on_file_path_changed(self):
         path = self.file_label.path
@@ -605,7 +622,8 @@ class MainWindow(QMainWindow):
                 self.private_key_label.path if key_type == "asymmetric" and public else "",
                 self.algorithm_combo.currentText(),
                 int(self.key_lengths_combo.currentText()),
-                key_path
+                key_path,
+                self.mode_combo.currentText() if hasattr(self, "mode_combo") else None
             )
 
             if key_type == "asymmetric":
@@ -623,7 +641,14 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, self.lang.t("error"), message + str(e))
 
     def show_history_menu(self, target_label: "ClickablePathLabel", item_type: str, button: QPushButton):
+        if self._ignore_history_button is button:
+            self._ignore_history_button = None
+            return
+
         menu = QMenu(self)
+
+        self._history_menu = menu
+        self._history_menu_button = button
 
         def refresh_menu():
             menu.close()
@@ -635,7 +660,7 @@ class MainWindow(QMainWindow):
         message = self.lang.t("file.history.clear") if item_type == "file" else self.lang.t("key.history.clear") if item_type == "key" else self.lang.t("key.private.history.clear") if item_type == "private_key" else self.lang.t("key.public.history.clear")
         clear_label = QLabel(message)
         clear_label.setObjectName("historyLabel")
-        clear_label.mousePressEvent = lambda event: (self.clear_history(), refresh_menu()) if event.button() == Qt.LeftButton else None
+        clear_label.mousePressEvent = lambda event: (self.clear_history(item_type), refresh_menu()) if event.button() == Qt.LeftButton else None
         clear_layout.addWidget(clear_label)
         clear_action = QWidgetAction(menu)
         clear_action.setDefaultWidget(clear_widget)
@@ -666,6 +691,7 @@ class MainWindow(QMainWindow):
                 label = QLabel(label_text)
                 label.setObjectName("historyLabel")
                 label.setToolTip(item["path"])
+                label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
                 
                 def on_label_click(path=item["path"], label_widget=target_label):
                     if os.path.exists(path):
@@ -675,31 +701,40 @@ class MainWindow(QMainWindow):
                     else:
                         message = self.lang.t("file.history.error") if item_type == "file" else self.lang.t("key.history.error") if item_type == "key" else self.lang.t("key.private.history.error") if item_type == "private_key" else self.lang.t("key.public.history.error")
                         QMessageBox.warning(self, self.lang.t("warning"), message.replace("$", path))
-                        self.remove_history_item(path)
+                        self.remove_history_item(path, item_type)
                         refresh_menu()
 
                 label.mousePressEvent = lambda event, func=on_label_click: func() if event.button() == Qt.LeftButton else None
 
                 remove_btn = QPushButton("×")
-                remove_btn.setFixedSize(20, 20)
+                remove_btn.setFixedWidth(32)
+                remove_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
                 remove_btn.setObjectName("removeHistoryButton")
-                remove_btn.clicked.connect(lambda _, p=item["path"]: (self.remove_history_item(p), refresh_menu()))
+                remove_btn.clicked.connect(lambda _, p=item["path"], t=item_type: (self.remove_history_item(p, t), refresh_menu()))
 
-                layout.addWidget(label)
-                layout.addStretch()
+                layout.addWidget(label, 1)
                 layout.addWidget(remove_btn)
 
                 action = QWidgetAction(menu)
                 action.setDefaultWidget(widget)
                 menu.addAction(action)
 
-        menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
+        def on_menu_hide():
+            if button.rect().contains(button.mapFromGlobal(QCursor.pos())):
+                self._ignore_history_button = button
 
-    def clear_history(self):
-        self.history.clear()
+            if self._history_menu is menu:
+                self._history_menu = None
+                self._history_menu_button = None
 
-    def remove_history_item(self, path: str):
-        self.history.remove(path)
+        menu.aboutToHide.connect(on_menu_hide)
+        menu.popup(button.mapToGlobal(button.rect().bottomLeft()))
+
+    def clear_history(self, item_type: str):
+        self.history.clear(item_type)
+
+    def remove_history_item(self, path: str, item_type: str):
+        self.history.remove(path, item_type)
 
     def start_encrypt_sign(self):
         self.start_crypto_task(encrypt=True)
@@ -1152,7 +1187,11 @@ class HistoryManager:
             return
 
         items = self.load()
-        items = [i for i in items if i["path"] != path]
+
+        items = [
+            item for item in items
+            if not (item["path"] == path and item.get("type") == item_type)
+        ]
 
         items.append({
             "path": path,
@@ -1161,17 +1200,39 @@ class HistoryManager:
             "type": item_type
         })
 
-        self.save(items[-self.get_limit():])
+        type_items = [item for item in items if item.get("type") == item_type]
+        other_items = [item for item in items if item.get("type") != item_type]
 
-    def remove(self, path: str):
-        items = [i for i in self.load() if i["path"] != path]
+        type_items = type_items[-self.get_limit():]
+
+        self.save(other_items + type_items)
+
+    def remove(self, path: str, item_type: str):
+        items = [
+            item for item in self.load()
+            if not (item["path"] == path and item.get("type") == item_type)
+        ]
         self.save(items)
 
-    def clear(self):
-        self.save([])
+    def clear(self, item_type: str):
+        items = [item for item in self.load() if item.get("type") != item_type]
+        self.save(items)
 
     def _trim(self):
-        self.save(self.load()[-self.get_limit():])
+        limit = self.get_limit()
+        items = self.load()
+        counts = {}
+        trimmed = []
+
+        for item in reversed(items):
+            item_type = item.get("type")
+            count = counts.get(item_type, 0)
+
+            if count < limit:
+                trimmed.append(item)
+                counts[item_type] = count + 1
+
+        self.save(list(reversed(trimmed)))
 
 class LanguageManager:
     def __init__(self, settings: QSettings, lang_dir="lang"):

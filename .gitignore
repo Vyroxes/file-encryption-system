@@ -17,9 +17,7 @@ venv/
 *.pdf
 *.docx
 *.py
-!main.py
-!GUI.py
-!Algorithms.py
+test.py
 .vscode/
 *.rar
 *.zip
