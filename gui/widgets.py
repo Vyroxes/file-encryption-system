@@ -316,6 +316,7 @@ class AnimatedComboBox(QComboBox):
         self._normal_border_color = QColor("#353535")
         self._hover_border_color = QColor("#454545")
         self._disabled_border_color = QColor("#555555")
+        self._focus_border_color = QColor("#808080")
 
         self._header_background_color = QColor("#252525")
         self._header_text_color = QColor("#a8a8a8")
@@ -412,11 +413,26 @@ class AnimatedComboBox(QComboBox):
 
         self._updating_style = True
 
+        border_color = (
+            self._focus_border_color
+            if self.hasFocus() and self.isEnabled()
+            else self._current_border_color
+        )
+
         self.setStyleSheet(
             f"""
             QComboBox {{
-                background-color: {self._current_color.name(QColor.NameFormat.HexArgb)};
-                border: 1px solid {self._current_border_color.name(QColor.NameFormat.HexArgb)};
+                background-color: {
+                    self._current_color.name(
+                        QColor.NameFormat.HexArgb
+                    )
+                };
+                border: 1px solid {
+                    border_color.name(
+                        QColor.NameFormat.HexArgb
+                    )
+                };
+                outline: none;
             }}
             """
         )
@@ -581,6 +597,15 @@ class AnimatedComboBox(QComboBox):
                 self._hover_color,
                 self._hover_border_color,
             )
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self._apply_style()
+
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self._apply_style()
 
 class AnimatedButton(QPushButton):
     def __init__(self, text="", parent=None):

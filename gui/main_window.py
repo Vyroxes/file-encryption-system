@@ -12,8 +12,8 @@ from psutil import Process
 from PySide6.QtCore import QLocale, QSettings, Qt, QTimer
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QComboBox, QProgressBar, QGroupBox, QSizePolicy,
-    QMessageBox, QMenu, QWidgetAction,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QComboBox, QProgressBar, QGroupBox, QSizePolicy,
+    QMessageBox, QMenu, QWidgetAction, QLineEdit, QCheckBox, QDialog
 )
 from PyTaskbar import ProgressType, TaskbarProgress
 
@@ -26,6 +26,9 @@ from .algorithm_info import AlgorithmInfoDialog
 from .history_manager import HistoryManager
 from .language_manager import LanguageManager
 from .settings_dialog import SettingsDialog
+from .password_generator_dialog import PasswordGeneratorDialog
+from .theme_manager import ThemeManager
+from password_kdf import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_RECOMMENDED_LENGTH
 from .widgets import (
     AnimatedButton, AnimatedComboBox, ClickablePathLabel, STREAMING_ROLE, StreamingComboDelegate, ALGORITHM_HEADER_ROLE
 )
@@ -41,7 +44,7 @@ SIGNATURE_ALGORITHMS = {
 
 
 class MainWindow(QMainWindow):
-    settings = QSettings("Vyroxes", "File Encryption and Decryption")
+    settings = QSettings("Vyroxes", "File Encryption & Decryption")
 
     def __init__(self):
         super().__init__()
@@ -50,9 +53,14 @@ class MainWindow(QMainWindow):
 
         self.lang = LanguageManager(self.settings)
 
+        self.theme_manager = ThemeManager(self)
+
+        self._reserved_key_height = 0
+        self._reserved_algorithm_height = 0
+
         self.setWindowTitle(self.lang.t("app.title"))
-        self.setMinimumSize(600, 578)
-        self.resize(600, 578)
+        self.setMinimumWidth(600)
+        self.resize(600, 1)
 
         self.key_generation_worker = None
 
@@ -74,6 +82,9 @@ class MainWindow(QMainWindow):
 
         central_widget = QWidget()
         general_layout = QVBoxLayout(central_widget)
+        general_layout.setAlignment(
+            Qt.AlignmentFlag.AlignTop
+        )
 
         header_layout = QHBoxLayout()
         header_layout.addStretch()
@@ -86,6 +97,10 @@ class MainWindow(QMainWindow):
         general_layout.addLayout(header_layout)
 
         self.file_signature_widget = QWidget()
+        self.file_signature_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         self.file_signature_layout = QHBoxLayout(self.file_signature_widget)
         self.file_signature_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -106,21 +121,314 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         general_layout.addWidget(self.progress_bar)
+        general_layout.addStretch(1)
 
         self.setCentralWidget(central_widget)
+
+        self.current_system_theme = None
+
         self.load_theme_on_start()
         self.load_history_on_start()
-        self.current_system_theme = None
 
         self.theme_timer = QTimer(self)
         self.theme_timer.timeout.connect(self.check_system_theme)
         self.theme_timer.start(1000)
 
+        QTimer.singleShot(
+            0,
+            self.prepare_initial_window,
+        )
+
+    def prepare_initial_window(self):
+        self.update_reserved_section_heights(
+            reset=True
+        )
+
+        self.adjustSize()
+        self.center_on_screen()
+
+    def refresh_layout(self):
+        layout = self.centralWidget().layout()
+
+        layout.invalidate()
+        layout.activate()
+
+        self.centralWidget().updateGeometry()
+        self.updateGeometry()
+
+        required_height = (
+            self.sizeHint().height()
+        )
+
+        if self.height() < required_height:
+            self.resize(
+                self.width(),
+                required_height,
+            )
+
+    def refresh_theme_layout(self):
+        self.update_reserved_section_heights(
+            reset=True
+        )
+
+        self.adjustSize()
+        self.center_on_screen()
+
+    def refresh_algorithm_layout(self):
+        previous_height = self.height()
+
+        self.update_reserved_algorithm_height()
+
+        self.refresh_layout()
+
+        if self.height() != previous_height:
+            self.center_on_screen()
+
+    def update_reserved_section_heights(
+        self,
+        reset=False,
+    ):
+        if reset:
+            self._reserved_key_height = 0
+            self._reserved_algorithm_height = 0
+
+            self.key_group.setMinimumHeight(
+                0
+            )
+
+            self.algorithm_group.setMinimumHeight(
+                0
+            )
+
+        self.setUpdatesEnabled(False)
+
+        try:
+            key_height = (
+                self.measure_max_key_height()
+            )
+
+            algorithm_height = (
+                self.measure_max_algorithm_height()
+            )
+
+        finally:
+            self.setUpdatesEnabled(True)
+
+        self._reserved_key_height = max(
+            self._reserved_key_height,
+            key_height,
+        )
+
+        self._reserved_algorithm_height = max(
+            self._reserved_algorithm_height,
+            algorithm_height,
+        )
+
+        self.key_group.setMinimumHeight(
+            self._reserved_key_height
+        )
+
+        self.algorithm_group.setMinimumHeight(
+            self._reserved_algorithm_height
+        )
+
+        self.refresh_layout()
+        self.update()
+
+    def measure_max_key_height(self):
+        widgets = (
+            self.single_key_widget,
+            self.rsa_keys_widget,
+            self.key_file_widget,
+            self.password_widget,
+            self.password_info_button,
+            self.password_generator_button,
+            self.password_confirm_label,
+            self.password_confirm_input,
+        )
+
+        states = [
+            (
+                widget,
+                widget.isHidden(),
+            )
+            for widget in widgets
+        ]
+
+        try:
+            self.key_group.setMinimumHeight(
+                0
+            )
+
+            self.single_key_widget.show()
+            self.rsa_keys_widget.hide()
+
+            self.key_file_widget.show()
+            self.password_widget.hide()
+            self.password_info_button.hide()
+
+            self._activate_key_layouts()
+
+            key_file_height = (
+                self.key_group
+                .sizeHint()
+                .height()
+            )
+
+            self.key_file_widget.hide()
+            self.password_widget.show()
+
+            self.password_info_button.show()
+            self.password_generator_button.show()
+
+            self.password_confirm_label.show()
+            self.password_confirm_input.show()
+
+            self._activate_key_layouts()
+
+            password_height = (
+                self.key_group
+                .sizeHint()
+                .height()
+            )
+
+            self.single_key_widget.hide()
+            self.rsa_keys_widget.show()
+
+            self._activate_key_layouts()
+
+            rsa_height = (
+                self.key_group
+                .sizeHint()
+                .height()
+            )
+
+            return max(
+                key_file_height,
+                password_height,
+                rsa_height,
+            )
+
+        finally:
+            for widget, hidden in states:
+                widget.setHidden(
+                    hidden
+                )
+
+            self._activate_key_layouts()
+
+    def _activate_key_layouts(self):
+        for widget in (
+            self.key_file_widget,
+            self.password_widget,
+            self.single_key_widget,
+            self.rsa_keys_widget,
+            self.key_group,
+        ):
+            widget.ensurePolished()
+
+            layout = widget.layout()
+
+            if layout is not None:
+                layout.invalidate()
+                layout.activate()
+
+            widget.updateGeometry()
+
+    def measure_max_algorithm_height(self):
+        was_hidden = (
+            self.algorithm_params_panel
+            .isHidden()
+        )
+
+        try:
+            self.algorithm_group.setMinimumHeight(
+                0
+            )
+
+            self.algorithm_params_panel.show()
+
+            self.algorithm_params_panel.ensurePolished()
+            self.algorithm_group.ensurePolished()
+
+            panel_layout = (
+                self.algorithm_params_panel
+                .layout()
+            )
+
+            if panel_layout is not None:
+                panel_layout.invalidate()
+                panel_layout.activate()
+
+            group_layout = (
+                self.algorithm_group.layout()
+            )
+
+            group_layout.invalidate()
+            group_layout.activate()
+
+            self.algorithm_params_panel.updateGeometry()
+            self.algorithm_group.updateGeometry()
+
+            return (
+                self.algorithm_group
+                .sizeHint()
+                .height()
+            )
+
+        finally:
+            self.algorithm_params_panel.setHidden(
+                was_hidden
+            )
+
+            self.algorithm_group.layout().invalidate()
+            self.algorithm_group.layout().activate()
+
+    def update_reserved_algorithm_height(self):
+        self.setUpdatesEnabled(False)
+
+        try:
+            height = (
+                self.measure_max_algorithm_height()
+            )
+
+        finally:
+            self.setUpdatesEnabled(True)
+
+        self._reserved_algorithm_height = max(
+            self._reserved_algorithm_height,
+            height,
+        )
+
+        self.algorithm_group.setMinimumHeight(
+            self._reserved_algorithm_height
+        )
+
+        self.update()
+
+    def center_on_screen(self):
+        screen = self.screen()
+
+        if screen is None:
+            screen = QApplication.primaryScreen()
+
+        if screen is None:
+            return
+
+        window_geometry = self.frameGeometry()
+        window_geometry.moveCenter(
+            screen.availableGeometry().center()
+        )
+
+        self.move(
+            window_geometry.topLeft()
+        )
+
     def create_signature_section(self):
         group = QGroupBox(self.lang.t("signature.group"))
         group.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Maximum,
         )
         layout = QVBoxLayout(group)
 
@@ -187,6 +495,109 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_process"):
             self._memory_samples.append(self._process.memory_info().rss)
 
+    def show_password_requirements(self):
+        message = self.lang.t(
+            "password.requirements.details"
+        )
+
+        message = (
+            message
+            .replace(
+                "$",
+                str(PASSWORD_MIN_LENGTH),
+            )
+            .replace(
+                "#",
+                str(PASSWORD_RECOMMENDED_LENGTH),
+            )
+            .replace(
+                "@",
+                str(PASSWORD_MAX_LENGTH),
+            )
+        )
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(
+            self.lang.t(
+                "password.requirements.title"
+            )
+        )
+        dialog.setModal(True)
+        dialog.setMinimumWidth(560)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(
+            16,
+            14,
+            16,
+            14,
+        )
+        layout.setSpacing(16)
+
+        message_label = QLabel(message)
+        message_label.setWordWrap(True)
+        message_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+
+        layout.addWidget(
+            message_label
+        )
+
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+        buttons_layout.addStretch()
+
+        ok_button = AnimatedButton(
+            self.lang.t("ok")
+        )
+        ok_button.setMinimumWidth(120)
+        ok_button.clicked.connect(
+            dialog.accept
+        )
+
+        buttons_layout.addWidget(
+            ok_button
+        )
+
+        layout.addLayout(
+            buttons_layout
+        )
+
+        dialog.adjustSize()
+        dialog.exec()
+
+    def open_password_generator(self):
+        dialog = PasswordGeneratorDialog(
+            self.lang,
+            self,
+        )
+
+        if (
+            dialog.exec()
+            != QDialog.DialogCode.Accepted
+        ):
+            return
+
+        password = dialog.generated_password
+
+        if not password:
+            return
+
+        self.password_input.setText(
+            password
+        )
+
+        self.password_confirm_input.setText(
+            password
+        )
+
     def create_select_row(self, text, select_callback, clear_callback, history_callback=None):
         layout = QHBoxLayout()
 
@@ -219,7 +630,7 @@ class MainWindow(QMainWindow):
         group = QGroupBox(self.lang.t("file.group"))
         group.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Maximum,
         )
         layout = QVBoxLayout(group)
 
@@ -247,9 +658,12 @@ class MainWindow(QMainWindow):
         self.key_group = QGroupBox(self.lang.t("key.group"))
         self.key_group.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Maximum,
         )
         self.key_layout = QVBoxLayout(self.key_group)
+        self.key_layout.setAlignment(
+            Qt.AlignmentFlag.AlignTop
+        )
 
         self.single_key_widget = self.create_single_key()
         self.rsa_keys_widget = self.create_rsa_keys()
@@ -263,37 +677,725 @@ class MainWindow(QMainWindow):
 
     def create_single_key(self):
         widget = QWidget()
+        widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-
-        row_layout, self.clear_key_button = self.create_select_row(
-            self.lang.t("key.select"),
-            self.select_key,
-            self.clear_key,
-            lambda btn: self.show_history_menu(self.key_label, "key", btn)
+        layout.setAlignment(
+            Qt.AlignmentFlag.AlignTop
         )
 
-        self.key_label = ClickablePathLabel("key", clear_button=self.clear_key_button, parent=self)
+        self.key_source_label = QLabel(
+            self.lang.t("key.source")
+        )
+
+        layout.addWidget(
+            self.key_source_label
+        )
+
+        key_source_row = QHBoxLayout()
+        key_source_row.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        key_source_row.setSpacing(8)
+
+        self.key_source_combo = AnimatedComboBox()
+        self.key_source_combo.addItem(
+            self.lang.t("key.source.file"),
+            "key_file",
+        )
+        self.key_source_combo.addItem(
+            self.lang.t("key.source.password"),
+            "password",
+        )
+
+        self.password_info_button = AnimatedButton("?")
+        self.password_info_button.setObjectName(
+            "infoButton"
+        )
+        self.password_info_button.setFixedSize(
+            28,
+            28,
+        )
+        self.password_info_button.setToolTip(
+            self.lang.t(
+                "password.requirements.tooltip"
+            )
+        )
+        self.password_info_button.clicked.connect(
+            self.show_password_requirements
+        )
+        self.password_info_button.hide()
+
+        key_source_row.addWidget(
+            self.key_source_combo,
+            1,
+        )
+        key_source_row.addWidget(
+            self.password_info_button
+        )
+
+        layout.addLayout(
+            key_source_row
+        )
+
+        self.key_file_widget = QWidget()
+        key_file_layout = QVBoxLayout(self.key_file_widget)
+        key_file_layout.setContentsMargins(0, 0, 0, 0)
+        key_file_layout.setSpacing(8)
+        key_file_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        row_layout, self.clear_key_button = (
+            self.create_select_row(
+                self.lang.t("key.select"),
+                self.select_key,
+                self.clear_key,
+                lambda btn: self.show_history_menu(
+                    self.key_label,
+                    "key",
+                    btn,
+                ),
+            )
+        )
+
+        self.key_label = ClickablePathLabel(
+            "key",
+            clear_button=self.clear_key_button,
+            parent=self,
+        )
+
         self.key_label.setSizePolicy(
             QSizePolicy.Policy.Ignored,
-            QSizePolicy.Policy.Preferred
+            QSizePolicy.Policy.Preferred,
         )
-        self.key_label.pathChanged.connect(self.update_operation_buttons_state)
 
-        layout.addWidget(self.key_label)
-        layout.addLayout(row_layout)
+        self.key_label.pathChanged.connect(
+            self.update_operation_buttons_state
+        )
 
-        self.generate_key_button = AnimatedButton(self.lang.t("key.generate"))
-        self.generate_key_button.clicked.connect(lambda: self.generate_key("symmetric", False))
+        key_file_layout.addWidget(
+            self.key_label
+        )
+        key_file_layout.addLayout(
+            row_layout
+        )
 
-        layout.addWidget(self.generate_key_button)
+        self.generate_key_button = AnimatedButton(
+            self.lang.t("key.generate")
+        )
+
+        self.generate_key_button.clicked.connect(
+            lambda: self.generate_key(
+                "symmetric",
+                False,
+            )
+        )
+
+        key_file_layout.addWidget(
+            self.generate_key_button
+        )
+
+        self.password_widget = QWidget()
+        password_layout = QVBoxLayout(self.password_widget)
+        password_layout.setContentsMargins(0, 0, 0, 0)
+        password_layout.setSpacing(8)
+        password_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        password_row = QHBoxLayout()
+        password_row.setContentsMargins(0, 0, 0, 0)
+        password_row.setSpacing(8)
+
+        password_column = QVBoxLayout()
+        password_column.setContentsMargins(0, 0, 0, 0)
+
+        self.password_label = QLabel(
+            self.lang.t("password")
+        )
+
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+
+        password_column.addWidget(
+            self.password_label
+        )
+        password_column.addWidget(
+            self.password_input
+        )
+
+        confirm_column = QVBoxLayout()
+        confirm_column.setContentsMargins(0, 0, 0, 0)
+
+        self.password_confirm_label = QLabel(
+            self.lang.t("password.confirm")
+        )
+
+        self.password_confirm_input = QLineEdit()
+        self.password_confirm_input.setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+
+        confirm_column.addWidget(
+            self.password_confirm_label
+        )
+        confirm_column.addWidget(
+            self.password_confirm_input
+        )
+
+        password_row.addLayout(
+            password_column,
+            1,
+        )
+
+        self.password_generator_button = AnimatedButton(
+            "⚄"
+        )
+        self.password_generator_button.setObjectName(
+            "infoButton"
+        )
+        self.password_generator_button.setFixedSize(
+            28,
+            28,
+        )
+        self.password_generator_button.setToolTip(
+            self.lang.t(
+                "password.generator.tooltip"
+            )
+        )
+        self.password_generator_button.clicked.connect(
+            self.open_password_generator
+        )
+
+        password_row.addWidget(
+            self.password_generator_button,
+            0,
+            Qt.AlignmentFlag.AlignBottom,
+        )
+
+        password_row.addLayout(
+            confirm_column,
+            1,
+        )
+
+        password_layout.addLayout(
+            password_row
+        )
+
+        password_info_row = QHBoxLayout()
+        password_info_row.setContentsMargins(0, 0, 0, 0)
+
+        self.show_password_checkbox = QCheckBox(
+            self.lang.t("password.show")
+        )
+
+        self.password_match_label = QLabel("")
+        self.password_match_label.setObjectName(
+            "passwordMatchLabel"
+        )
+        self.password_match_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight
+            | Qt.AlignmentFlag.AlignVCenter
+        )
+
+        password_info_row.addWidget(
+            self.show_password_checkbox
+        )
+        password_info_row.addStretch()
+        password_info_row.addWidget(
+            self.password_match_label
+        )
+
+        password_layout.addLayout(
+            password_info_row
+        )
+
+        strength_row = QHBoxLayout()
+        strength_row.setContentsMargins(0, 0, 0, 0)
+
+        strength_title = QLabel(
+            self.lang.t("password.strength")
+        )
+
+        self.password_strength_bar = QProgressBar()
+        self.password_strength_bar.setObjectName(
+            "passwordStrengthBar"
+        )
+        self.password_strength_bar.setRange(0, 4)
+        self.password_strength_bar.setValue(0)
+        self.password_strength_bar.setTextVisible(False)
+        self.password_strength_bar.setFixedHeight(8)
+
+        self.password_strength_label = QLabel(
+            self.lang.t("password.strength.empty")
+        )
+
+        strength_row.addWidget(
+            strength_title
+        )
+        strength_row.addWidget(
+            self.password_strength_bar,
+            1,
+        )
+        strength_row.addWidget(
+            self.password_strength_label
+        )
+
+        password_layout.addLayout(
+            strength_row
+        )
+
+        self.kdf_label = QLabel(
+            self.lang.t("password.kdf")
+        )
+
+        self.kdf_combo = AnimatedComboBox()
+        self.kdf_combo.addItem(
+            "Argon2id",
+            "argon2id",
+        )
+        self.kdf_combo.addItem(
+            "PBKDF2-HMAC-SHA256",
+            "pbkdf2-sha256",
+        )
+
+        password_layout.addWidget(
+            self.kdf_label
+        )
+        password_layout.addWidget(
+            self.kdf_combo
+        )
+
+        layout.addWidget(
+            self.key_file_widget
+        )
+        layout.addWidget(
+            self.password_widget
+        )
+
+        self.key_source_combo.currentIndexChanged.connect(
+            self.update_key_source_ui
+        )
+
+        self.password_input.textChanged.connect(
+            self.update_password_feedback
+        )
+
+        self.password_confirm_input.textChanged.connect(
+            self.update_password_feedback
+        )
+
+        self.show_password_checkbox.toggled.connect(
+            self.toggle_password_visibility
+        )
+
+        self.password_widget.hide()
 
         return widget
 
+    def update_key_source_ui(self):
+        use_password = (
+            self.key_source_combo.currentData()
+            == "password"
+        )
+
+        self.password_info_button.setVisible(
+            use_password
+        )
+
+        file_path = self.file_label.path
+        is_encrypted = bool(
+            file_path
+            and file_path.lower().endswith(".enc")
+        )
+
+        self.password_generator_button.setVisible(
+            use_password
+            and not is_encrypted
+        )
+
+        self.key_file_widget.setVisible(
+            not use_password
+        )
+        self.password_widget.setVisible(
+            use_password
+        )
+
+        if is_encrypted:
+            self.password_input.setMaxLength(
+                32767
+            )
+        else:
+            self.password_input.setMaxLength(
+                PASSWORD_MAX_LENGTH
+            )
+
+        self.password_confirm_input.setMaxLength(
+            PASSWORD_MAX_LENGTH
+        )
+
+        self.key_source_combo.setEnabled(
+            not is_encrypted
+        )
+
+        self.password_confirm_label.setVisible(
+            not is_encrypted
+        )
+        self.password_confirm_input.setVisible(
+            not is_encrypted
+        )
+
+        self.kdf_combo.setEnabled(
+            not is_encrypted
+        )
+
+        self.update_password_feedback()
+
+        QTimer.singleShot(
+            0,
+            self.refresh_layout,
+        )
+
+    def toggle_password_visibility(
+        self,
+        checked: bool,
+    ):
+        echo_mode = (
+            QLineEdit.EchoMode.Normal
+            if checked
+            else QLineEdit.EchoMode.Password
+        )
+
+        self.password_input.setEchoMode(
+            echo_mode
+        )
+
+        self.password_confirm_input.setEchoMode(
+            echo_mode
+        )
+
+
+    def update_password_feedback(self):
+        password = self.password_input.text()
+        confirmation = (
+            self.password_confirm_input.text()
+        )
+
+        file_path = self.file_label.path
+        is_encrypted = bool(
+            file_path
+            and file_path.lower().endswith(".enc")
+        )
+
+        if is_encrypted:
+            self._set_password_match_state(
+                "",
+                "",
+            )
+
+        elif not confirmation:
+            self._set_password_match_state(
+                "",
+                "",
+            )
+
+        elif password == confirmation:
+            self._set_password_match_state(
+                "match",
+                "✓ "
+                + self.lang.t(
+                    "password.match"
+                ),
+            )
+
+        else:
+            self._set_password_match_state(
+                "mismatch",
+                "✕ "
+                + self.lang.t(
+                    "password.mismatch"
+                ),
+            )
+
+        score, state, translation_key = (
+            self._password_strength(
+                password
+            )
+        )
+
+        self.password_strength_bar.setValue(
+            score
+        )
+
+        self.password_strength_bar.setProperty(
+            "strength",
+            state,
+        )
+
+        self._refresh_widget_style(
+            self.password_strength_bar
+        )
+
+        self.password_strength_label.setText(
+            self.lang.t(translation_key)
+        )
+
+        self.update_operation_buttons_state()
+
+    def _set_password_match_state(
+        self,
+        state: str,
+        text: str,
+    ):
+        self.password_confirm_input.setProperty(
+            "passwordState",
+            state,
+        )
+
+        self.password_match_label.setProperty(
+            "passwordState",
+            state,
+        )
+
+        self.password_match_label.setText(
+            text
+        )
+
+        self._refresh_widget_style(
+            self.password_confirm_input
+        )
+
+        self._refresh_widget_style(
+            self.password_match_label
+        )
+
+    @staticmethod
+    def _max_repeated_run(text: str) -> int:
+        if not text:
+            return 0
+
+        longest = 1
+        current = 1
+
+        for index in range(1, len(text)):
+            if text[index] == text[index - 1]:
+                current += 1
+                longest = max(longest, current)
+            else:
+                current = 1
+
+        return longest
+
+
+    @staticmethod
+    def _has_sequence(
+        text: str,
+        sequence_length: int = 4,
+    ) -> bool:
+        if len(text) < sequence_length:
+            return False
+
+        lowered = text.casefold()
+
+        for index in range(
+            len(lowered) - sequence_length + 1
+        ):
+            chunk = lowered[
+                index:index + sequence_length
+            ]
+
+            if not chunk.isalnum():
+                continue
+
+            ascending = all(
+                ord(chunk[pos])
+                == ord(chunk[pos - 1]) + 1
+                for pos in range(1, len(chunk))
+            )
+
+            descending = all(
+                ord(chunk[pos])
+                == ord(chunk[pos - 1]) - 1
+                for pos in range(1, len(chunk))
+            )
+
+            if ascending or descending:
+                return True
+
+        return False
+
+
+    def _password_strength(
+        self,
+        password: str,
+    ) -> tuple[int, str, str]:
+        if not password:
+            return (
+                0,
+                "empty",
+                "password.strength.empty",
+            )
+
+        length = len(password)
+
+        if length < PASSWORD_MIN_LENGTH:
+            return (
+                1,
+                "weak",
+                "password.strength.too.short",
+            )
+
+        has_lower = any(
+            char.islower()
+            for char in password
+        )
+        has_upper = any(
+            char.isupper()
+            for char in password
+        )
+        has_digit = any(
+            char.isdigit()
+            for char in password
+        )
+        has_special = any(
+            not char.isalnum()
+            and not char.isspace()
+            for char in password
+        )
+
+        character_groups = sum(
+            (
+                has_lower,
+                has_upper,
+                has_digit,
+                has_special,
+            )
+        )
+
+        unique_ratio = (
+            len(set(password)) / length
+        )
+
+        repeated_run = self._max_repeated_run(
+            password
+        )
+
+        has_sequence = self._has_sequence(
+            password
+        )
+
+        lowered = password.casefold()
+
+        common_patterns = (
+            "password",
+            "qwerty",
+            "letmein",
+            "admin",
+        )
+
+        has_common_pattern = any(
+            pattern in lowered
+            for pattern in common_patterns
+        )
+
+        points = 0
+
+        if length >= 12:
+            points += 1
+
+        if length >= 16:
+            points += 1
+
+        if length >= 20:
+            points += 1
+
+        if length >= 24:
+            points += 1
+
+        if character_groups >= 2:
+            points += 1
+
+        if character_groups >= 3:
+            points += 1
+
+        if character_groups == 4:
+            points += 1
+
+        if unique_ratio >= 0.5:
+            points += 1
+
+        if unique_ratio >= 0.7:
+            points += 1
+
+        if unique_ratio < 0.3:
+            points -= 2
+
+        if repeated_run >= 4:
+            points -= 2
+
+        if repeated_run >= 6:
+            points -= 2
+
+        if has_sequence:
+            points -= 2
+
+        if has_common_pattern:
+            points -= 2
+
+        points = max(points, 0)
+
+        if points <= 2:
+            return (
+                1,
+                "weak",
+                "password.strength.weak",
+            )
+
+        if points <= 4:
+            return (
+                2,
+                "medium",
+                "password.strength.medium",
+            )
+
+        if (
+            length < PASSWORD_RECOMMENDED_LENGTH
+            or points <= 5
+        ):
+            return (
+                3,
+                "good",
+                "password.strength.good",
+            )
+
+        return (
+            4,
+            "strong",
+            "password.strength.strong",
+        )
+
+    @staticmethod
+    def _refresh_widget_style(widget):
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+        widget.update()
+
     def create_rsa_keys(self):
         widget = QWidget()
+        widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(
+            Qt.AlignmentFlag.AlignTop
+        )
 
         row_layout, self.clear_private_key_button = self.create_select_row(
             self.lang.t("key.select.private"),
@@ -313,6 +1415,9 @@ class MainWindow(QMainWindow):
         private_layout = QVBoxLayout()
         private_layout.addWidget(self.private_key_label)
         private_layout.addLayout(row_layout)
+        private_layout.setAlignment(
+            Qt.AlignmentFlag.AlignTop
+        )
 
         row_layout, self.clear_public_key_button = self.create_select_row(
             self.lang.t("key.select.public"),
@@ -331,6 +1436,9 @@ class MainWindow(QMainWindow):
         public_layout = QVBoxLayout()
         public_layout.addWidget(self.public_key_label)
         public_layout.addLayout(row_layout)
+        public_layout.setAlignment(
+            Qt.AlignmentFlag.AlignTop
+        )
         
         self.generate_private_key_button = AnimatedButton(self.lang.t("key.generate.private"))
         self.generate_private_key_button.clicked.connect(lambda: self.generate_key("asymmetric", False))
@@ -341,15 +1449,23 @@ class MainWindow(QMainWindow):
         private_layout.addWidget(self.generate_private_key_button)
         public_layout.addWidget(self.generate_public_key_button)
 
-        layout.addLayout(private_layout)
-        layout.addLayout(public_layout)
+        layout.addLayout(private_layout, 1)
+        layout.addLayout(public_layout, 1)
 
         return widget
 
     def create_algorithm_section(self):
         self.algorithm_group = QGroupBox(self.lang.t("algorithm.group"))
-        self.algorithm_group.setFixedHeight(124)
+        # self.algorithm_group.setMinimumHeight(124)
+        self.algorithm_group.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
+
         layout = QVBoxLayout(self.algorithm_group)
+        layout.setAlignment(
+            Qt.AlignmentFlag.AlignTop
+        )
 
         top_row_layout = QHBoxLayout()
         top_row_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -457,6 +1573,10 @@ class MainWindow(QMainWindow):
         self.algorithm_params_panel = QWidget()
         self.algorithm_params_panel.setVisible(False)
         self.algorithm_params_panel.setLayout(QHBoxLayout())
+        self.algorithm_params_panel.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
 
         layout.addLayout(top_row_layout)
         layout.addWidget(self.algorithm_params_panel)
@@ -488,6 +1608,10 @@ class MainWindow(QMainWindow):
 
     def create_operations_section(self):
         group = QGroupBox(self.lang.t("operations.group"))
+        group.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
         layout = QVBoxLayout(group)
 
         buttons_layout = QHBoxLayout()
@@ -704,10 +1828,20 @@ class MainWindow(QMainWindow):
         layout.addLayout(middle_column)
         layout.addLayout(right_column)
 
+        QTimer.singleShot(
+            0,
+            self.refresh_algorithm_layout,
+        )
+
     def toggle_algorithm_params(self, state):
         self.algorithm_params_panel.setVisible(state)
         self.toggle_params_button.setText(
             self.lang.t("algorithm.hide.settings") if state else self.lang.t("algorithm.show.settings")
+        )
+
+        QTimer.singleShot(
+            0,
+            self.refresh_layout,
         )
 
     def clear_layout(self, layout):
@@ -765,7 +1899,7 @@ class MainWindow(QMainWindow):
             self.lang.t("operations.decrypt")
         )
 
-        if algorithm_name == "RSA-OAEP":
+        if algorithm_name in ("RSA-OAEP", "ML-KEM"):
             self.encrypt_sign_button.setEnabled(
                 is_file_selected
                 and bool(self.public_key_label.path)
@@ -780,7 +1914,32 @@ class MainWindow(QMainWindow):
 
             return
 
-        has_key = bool(self.key_label.path)
+        use_password = (
+            hasattr(self, "key_source_combo")
+            and self.key_source_combo.currentData()
+            == "password"
+        )
+
+        if use_password:
+            password = self.password_input.text()
+
+            if is_enc_file:
+                has_key = bool(password)
+            else:
+                confirmation = (
+                    self.password_confirm_input.text()
+                )
+
+                has_key = (
+                    PASSWORD_MIN_LENGTH
+                    <= len(password)
+                    <= PASSWORD_MAX_LENGTH
+                    and password == confirmation
+                )
+        else:
+            has_key = bool(
+                self.key_label.path
+            )
 
         self.encrypt_sign_button.setEnabled(
             is_file_selected
@@ -824,6 +1983,7 @@ class MainWindow(QMainWindow):
 
     def on_file_path_changed(self):
         path = self.file_label.path
+
         if path and path.lower().endswith(".enc"):
             meta, params = self.load_metadata_from_enc(path)
 
@@ -857,6 +2017,39 @@ class MainWindow(QMainWindow):
                 idx = self.curves_combo.findText(params["curve"])
                 if idx >= 0:
                     self.curves_combo.setCurrentIndex(idx)
+
+            if hasattr(self, "key_source_combo"):
+                key_source = params.get(
+                    "key_source",
+                    "key_file",
+                )
+
+                index = self.key_source_combo.findData(
+                    key_source
+                )
+
+                if index >= 0:
+                    self.key_source_combo.setCurrentIndex(
+                        index
+                    )
+
+            if hasattr(self, "kdf_combo"):
+                kdf = params.get("kdf", {})
+
+                if isinstance(kdf, dict):
+                    kdf_name = kdf.get("name")
+
+                    if kdf_name:
+                        index = self.kdf_combo.findData(
+                            kdf_name
+                        )
+
+                        if index >= 0:
+                            self.kdf_combo.setCurrentIndex(
+                                index
+                            )
+
+        self.update_key_source_ui()
 
     def select_file(self):
         options = QFileDialog.Option()
@@ -1178,7 +2371,10 @@ class MainWindow(QMainWindow):
                 label = QLabel(label_text)
                 label.setObjectName("historyLabel")
                 label.setToolTip(item["path"])
-                label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+                label.setSizePolicy(
+                    QSizePolicy.Policy.Expanding,
+                    QSizePolicy.Policy.Preferred
+                )
                 
                 def on_label_click(path=item["path"], label_widget=target_label):
                     if os.path.exists(path):
@@ -1373,14 +2569,106 @@ class MainWindow(QMainWindow):
             ),
         }
 
+        password = None
+        kdf_name = None
+
+        algorithm_config = ALGORITHMS.get(
+            algorithm,
+            {},
+        )
+
+        if (
+            algorithm_config.get("type")
+            == "symmetric"
+            and self.key_source_combo.currentData()
+            == "password"
+        ):
+            password = self.password_input.text()
+
+            if not password:
+                QMessageBox.warning(
+                    self,
+                    self.lang.t("warning"),
+                    self.lang.t(
+                        "password.error.empty"
+                    ),
+                )
+                return
+
+            if (
+                operation == "encrypt"
+                and len(password) < PASSWORD_MIN_LENGTH
+            ):
+                message = self.lang.t(
+                    "password.error.min.length"
+                ).replace(
+                    "$",
+                    str(PASSWORD_MIN_LENGTH),
+                )
+
+                QMessageBox.warning(
+                    self,
+                    self.lang.t("warning"),
+                    message,
+                )
+                return
+
+            if (
+                operation == "encrypt"
+                and len(password) > PASSWORD_MAX_LENGTH
+            ):
+                message = self.lang.t(
+                    "password.error.max.length"
+                ).replace(
+                    "$",
+                    str(PASSWORD_MAX_LENGTH),
+                )
+
+                QMessageBox.warning(
+                    self,
+                    self.lang.t("warning"),
+                    message,
+                )
+                return
+
+            if operation == "encrypt":
+                confirmation = (
+                    self.password_confirm_input.text()
+                )
+
+                if password != confirmation:
+                    QMessageBox.warning(
+                        self,
+                        self.lang.t("warning"),
+                        self.lang.t(
+                            "password.error.match"
+                        ),
+                    )
+                    return
+
+                kdf_name = (
+                    self.kdf_combo.currentData()
+                )
+
         if algorithm in ("RSA-OAEP", "ML-KEM"):
             crypto_key_path = (
                 self.public_key_label.path
                 if operation == "encrypt"
                 else self.private_key_label.path
             )
+
+        elif (
+            algorithm_config.get("type")
+            == "symmetric"
+            and self.key_source_combo.currentData()
+            == "password"
+        ):
+            crypto_key_path = None
+
         else:
-            crypto_key_path = self.key_label.path
+            crypto_key_path = (
+                self.key_label.path
+            )
 
         self.worker = CryptoWorker(
             operation=operation,
@@ -1391,6 +2679,8 @@ class MainWindow(QMainWindow):
             private_key_path=self.private_key_label.path,
             public_key_path=self.public_key_label.path,
             signature_path=self.signature_label.path,
+            password=password,
+            kdf_name=kdf_name,
             params=params,
             lang=self.lang,
         )
@@ -1560,50 +2850,92 @@ class MainWindow(QMainWindow):
         self.update_operation_buttons_state()
 
     def load_theme_on_start(self):
-        use_system = self.settings.value("use_system_theme", True, type=bool)
+        use_system = self.settings.value(
+            "use_system_theme",
+            True,
+            type=bool,
+        )
 
         if use_system:
             self.apply_system_theme()
-        else:
-            theme = self.settings.value("theme", "light")
-            if theme == "dark":
-                self.apply_dark_theme()
-            else:
-                self.apply_light_theme()
+            return
+
+        theme = self.settings.value(
+            "theme",
+            "light",
+        )
+
+        self.apply_theme(
+            theme
+        )
 
     def load_history_on_start(self):
-        self.history = HistoryManager(self.settings)
-
-    def load_stylesheet(self, path):
-        with open(path, "r", encoding="utf-8") as f:
-            self.setStyleSheet(f.read())
+        self.history = HistoryManager(
+            self.settings
+        )
 
     def check_system_theme(self):
-        if not self.settings.value("use_system_theme", True, type=bool):
+        if not self.settings.value(
+            "use_system_theme",
+            True,
+            type=bool,
+        ):
             return
 
         is_dark = darkdetect.isDark()
-        new_theme = "dark" if is_dark else "light"
 
-        if new_theme != self.current_system_theme:
-            self.current_system_theme = new_theme
+        new_theme = (
+            "dark"
+            if is_dark
+            else "light"
+        )
 
-            if new_theme == "dark":
-                self.apply_dark_theme()
-            else:
-                self.apply_light_theme()
+        if new_theme == self.current_system_theme:
+            return
+
+        self.current_system_theme = new_theme
+
+        self.apply_theme(
+            new_theme
+        )
 
     def apply_system_theme(self):
         is_dark = darkdetect.isDark()
-        self.current_system_theme = "dark" if is_dark else "light"
 
-        if is_dark:
-            self.apply_dark_theme()
-        else:
-            self.apply_light_theme()
+        self.current_system_theme = (
+            "dark"
+            if is_dark
+            else "light"
+        )
+
+        self.apply_theme(
+            self.current_system_theme
+        )
+
+    def apply_theme(self, theme: str):
+        if not self.theme_manager.load_theme(
+            theme
+        ):
+            self.settings.setValue(
+                "theme",
+                "light",
+            )
+
+            self.theme_manager.load_theme(
+                "light"
+            )
+
+        QTimer.singleShot(
+            0,
+            self.refresh_theme_layout,
+        )
 
     def apply_light_theme(self):
-        self.load_stylesheet("theme/light.qss")
+        self.apply_theme(
+            "light"
+        )
 
     def apply_dark_theme(self):
-        self.load_stylesheet("theme/dark.qss")
+        self.apply_theme(
+            "dark"
+        )

@@ -4,6 +4,7 @@ import tempfile
 from PySide6.QtCore import QThread, Signal
 
 from algorithms import ALGORITHMS, StreamCipher, Signer
+from password_kdf import create_kdf_params, derive_password_key
 from file_format import read_header, write_header
 
 
@@ -23,6 +24,8 @@ class CryptoWorker(QThread):
         private_key_path: str = None,
         public_key_path: str = None,
         signature_path: str | None = None,
+        password: str | None = None,
+        kdf_name: str | None = None,
         params: dict | None = None,
         lang=None,
     ):
@@ -39,6 +42,8 @@ class CryptoWorker(QThread):
         self.private_key_path = private_key_path
         self.public_key_path = public_key_path
         self.signature_path = signature_path
+        self.password = password
+        self.kdf_name = kdf_name
         self.params = params or {}
         self.lang = lang
 
@@ -52,47 +57,52 @@ class CryptoWorker(QThread):
             if self._cancelled:
                 return
 
+            algorithm = self._load_algorithm(
+                self.algorithm_name
+            )
+
             if self.operation == "encrypt":
-                algorithm = self._load_algorithm(self.algorithm_name)
                 self._encrypt(algorithm)
 
             elif self.operation == "decrypt":
                 self._decrypt()
 
             elif self.operation == "sign":
-                algorithm = self._load_algorithm(self.algorithm_name)
                 self._sign(algorithm)
 
             elif self.operation == "verify":
-                algorithm = self._load_algorithm(self.algorithm_name)
                 valid = self._verify(algorithm)
 
                 if not self._cancelled:
                     self.progress.emit(100)
-                    self.verification_finished.emit(valid)
+                    self.verification_finished.emit(
+                        valid
+                    )
 
                 return
 
             else:
                 raise ValueError(
-                    self._message(
-                        "operations.error.10",
-                        "Operation not supported.",
+                    self.lang.t(
+                        "operations.error.10"
                     )
                 )
 
             if not self._cancelled:
                 self.progress.emit(100)
-                self.finished.emit(self.output_file or "")
+                self.finished.emit(
+                    self.output_file or ""
+                )
 
         except RuntimeError as exc:
-            if str(exc) == "CANCELLED":
-                return
-
-            self.error.emit(str(exc))
+            if str(exc) != "CANCELLED":
+                self.error.emit(str(exc))
 
         except Exception as exc:
             self.error.emit(str(exc))
+
+        finally:
+            self._remove_temp_output()
 
     def _encrypt(self, algorithm):
         total_size = os.path.getsize(self.input_file)
@@ -116,21 +126,25 @@ class CryptoWorker(QThread):
                 if not isinstance(algorithm, StreamCipher):
                     raise ValueError(self._message("operations.error.10", "Operation not supported"))
 
+                params = dict(self.params)
+
+                key = self._get_encryption_key(
+                    params
+                )
+
                 header_bytes = write_header(
                     fout,
                     {
                         "algorithm": self.algorithm_name,
-                        "params": self.params,
+                        "params": params,
                     },
                 )
-
-                key = self._load_key(self.key_path)
 
                 algorithm.encrypt_stream(
                     fin,
                     fout,
                     key,
-                    self.params,
+                    params,
                     lambda: self._cancelled,
                     report_progress,
                     aad=header_bytes,
@@ -173,7 +187,7 @@ class CryptoWorker(QThread):
                 if not isinstance(algorithm, StreamCipher):
                     raise ValueError(self._message("operations.error.10", "Operation not supported."))
 
-                key = self._load_key(self.key_path)
+                key = self._get_decryption_key(header["params"], algorithm_name)
 
                 algorithm.decrypt_stream(
                     fin,
@@ -192,6 +206,105 @@ class CryptoWorker(QThread):
                 os.fsync(fout.fileno())
 
         self._commit_temp_output()
+
+    def _get_encryption_key(
+        self,
+        params: dict,
+    ) -> bytes:
+        if self.password is None:
+            params["key_source"] = "key_file"
+            params.pop("kdf", None)
+
+            return self._load_key(
+                self.key_path
+            )
+
+        key_length = params.get(
+            "key_length"
+        )
+
+        if not key_length:
+            raise ValueError(
+                self._message(
+                    "password.error.key.length",
+                    "Key length is required for password-based encryption.",
+                )
+            )
+
+        kdf_params = create_kdf_params(
+            self.kdf_name or "argon2id"
+        )
+
+        params["key_source"] = "password"
+        params["kdf"] = kdf_params
+
+        return derive_password_key(
+            self.password,
+            int(key_length),
+            kdf_params,
+            self.algorithm_name,
+        )
+
+
+    def _get_decryption_key(
+        self,
+        params: dict,
+        algorithm_name: str,
+    ) -> bytes:
+        key_source = params.get(
+            "key_source",
+            "key_file",
+        )
+
+        if key_source == "key_file":
+            return self._load_key(
+                self.key_path
+            )
+
+        if key_source != "password":
+            raise ValueError(
+                self._message(
+                    "password.error.source",
+                    "Unsupported key source.",
+                )
+            )
+
+        if not self.password:
+            raise ValueError(
+                self._message(
+                    "password.error.empty",
+                    "Please enter the password.",
+                )
+            )
+
+        kdf_params = params.get("kdf")
+
+        if not isinstance(kdf_params, dict):
+            raise ValueError(
+                self._message(
+                    "password.error.kdf",
+                    "Invalid KDF parameters.",
+                )
+            )
+
+        key_length = params.get(
+            "key_length"
+        )
+
+        if not key_length:
+            raise ValueError(
+                self._message(
+                    "password.error.key.length",
+                    "Key length is required for password-based encryption.",
+                )
+            )
+
+        return derive_password_key(
+            self.password,
+            int(key_length),
+            kdf_params,
+            algorithm_name,
+        )
 
     def _sign(self, algo):
         if not isinstance(algo, Signer):

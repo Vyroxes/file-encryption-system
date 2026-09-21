@@ -49,19 +49,81 @@ class SettingsDialog(QDialog):
         general_layout.addWidget(self.language_combo)
 
         self.theme_combo = AnimatedComboBox()
-        self.theme_combo.addItem(self.lang.t("settings.theme.light"), "light")
-        self.theme_combo.addItem(self.lang.t("settings.theme.dark"), "dark")
-        self.theme_combo.addItem(self.lang.t("settings.theme.system"), "system")
 
-        current_theme = self.settings.value("theme", "light")
-        use_system = self.settings.value("use_system_theme", False, type=bool)
-        if use_system:
-            self.theme_combo.setCurrentIndex(2)
-        else:
-            self.theme_combo.setCurrentIndex(0 if current_theme == "light" else 1)
+        self.theme_combo.addItem(
+            self.lang.t(
+                "settings.theme.light"
+            ),
+            "light",
+        )
 
-        general_layout.addWidget(QLabel(self.lang.t("settings.theme")))
-        general_layout.addWidget(self.theme_combo)
+        self.theme_combo.addItem(
+            self.lang.t(
+                "settings.theme.dark"
+            ),
+            "dark",
+        )
+
+        self.theme_combo.addItem(
+            self.lang.t(
+                "settings.theme.system"
+            ),
+            "system",
+        )
+
+        for theme in (
+            self.parent_window
+            .theme_manager
+            .custom_themes()
+        ):
+            self.theme_combo.addItem(
+                self.parent_window
+                .theme_manager
+                .display_name(theme),
+                theme,
+            )
+
+        current_theme = self.settings.value(
+            "theme",
+            "light",
+        )
+
+        use_system = self.settings.value(
+            "use_system_theme",
+            False,
+            type=bool,
+        )
+
+        selected_theme = (
+            "system"
+            if use_system
+            else current_theme
+        )
+
+        index = self.theme_combo.findData(
+            selected_theme
+        )
+
+        if index < 0:
+            index = self.theme_combo.findData(
+                "light"
+            )
+
+        self.theme_combo.setCurrentIndex(
+            index
+        )
+
+        general_layout.addWidget(
+            QLabel(
+                self.lang.t(
+                    "settings.theme"
+                )
+            )
+        )
+
+        general_layout.addWidget(
+            self.theme_combo
+        )
 
         tabs.addTab(general_tab, self.lang.t("settings.tab.general"))
 
@@ -113,17 +175,32 @@ class SettingsDialog(QDialog):
         main_layout.addWidget(close_button)
 
     def apply_and_close(self):
-        theme_choice = self.theme_combo.currentData()
+        theme_choice = (
+            self.theme_combo.currentData()
+        )
+
         if theme_choice == "system":
-            self.settings.setValue("use_system_theme", True)
+            self.settings.setValue(
+                "use_system_theme",
+                True,
+            )
+
             self.parent_window.apply_system_theme()
+
         else:
-            self.settings.setValue("use_system_theme", False)
-            self.settings.setValue("theme", theme_choice)
-            if theme_choice == "light":
-                self.parent_window.apply_light_theme()
-            else:
-                self.parent_window.apply_dark_theme()
+            self.settings.setValue(
+                "use_system_theme",
+                False,
+            )
+
+            self.settings.setValue(
+                "theme",
+                theme_choice,
+            )
+
+            self.parent_window.apply_theme(
+                theme_choice
+            )
 
         new_lang = self.language_combo.currentData()
         current_lang = self.settings.value("language", "en")
