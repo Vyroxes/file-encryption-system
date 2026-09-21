@@ -1,25 +1,44 @@
 import warnings
+from time import time
+import os
+import sys
+
 from cryptography.utils import CryptographyDeprecationWarning
 
 warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 
-import os
-import sys
-import json
-from time import time
+import darkdetect
 from psutil import Process
+from PySide6.QtCore import QLocale, QSettings, Qt, QTimer
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QComboBox, QProgressBar,
-    QGroupBox, QDialog, QSizePolicy, QMessageBox, QMenu, QWidgetAction, QTabWidget, QSpinBox
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QComboBox, QProgressBar, QGroupBox, QSizePolicy,
+    QMessageBox, QMenu, QWidgetAction,
 )
-from PySide6.QtCore import Qt, QSettings, QTimer, Signal, QLocale
 from PyTaskbar import ProgressType, TaskbarProgress
-import darkdetect
+
 from algorithms import ALGORITHMS
 from crypto_worker import CryptoWorker
-from key_manager import generate_key
 from file_format import read_header
+from key_generation_worker import KeyGenerationWorker
+
+from .algorithm_info import AlgorithmInfoDialog
+from .history_manager import HistoryManager
+from .language_manager import LanguageManager
+from .settings_dialog import SettingsDialog
+from .widgets import (
+    AnimatedButton, AnimatedComboBox, ClickablePathLabel, STREAMING_ROLE, StreamingComboDelegate, ALGORITHM_HEADER_ROLE
+)
+
+
+SIGNATURE_ALGORITHMS = {
+    "RSA-PSS",
+    "EdDSA",
+    "ECDSA",
+    "ML-DSA",
+    "SLH-DSA",
+}
+
 
 class MainWindow(QMainWindow):
     settings = QSettings("Vyroxes", "File Encryption and Decryption")
@@ -34,6 +53,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self.lang.t("app.title"))
         self.setMinimumSize(600, 578)
         self.resize(600, 578)
+
+        self.key_generation_worker = None
 
         self._process = Process(os.getpid())
         self._memory_samples = []
@@ -57,14 +78,26 @@ class MainWindow(QMainWindow):
         header_layout = QHBoxLayout()
         header_layout.addStretch()
 
-        self.settings_button = QPushButton(self.lang.t("settings.title"))
+        self.settings_button = AnimatedButton(self.lang.t("settings.title"))
         self.settings_button.setObjectName("settingsButton")
         self.settings_button.clicked.connect(self.open_settings)
 
         header_layout.addWidget(self.settings_button)
         general_layout.addLayout(header_layout)
 
-        general_layout.addWidget(self.create_file_section())
+        self.file_signature_widget = QWidget()
+        self.file_signature_layout = QHBoxLayout(self.file_signature_widget)
+        self.file_signature_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.file_group = self.create_file_section()
+        self.signature_group = self.create_signature_section()
+
+        self.file_signature_layout.addWidget(self.file_group, 1)
+        self.file_signature_layout.addWidget(self.signature_group, 1)
+
+        self.signature_group.hide()
+
+        general_layout.addWidget(self.file_signature_widget)
         general_layout.addWidget(self.create_key_section())
         general_layout.addWidget(self.create_algorithm_section())
         general_layout.addWidget(self.create_operations_section())
@@ -82,6 +115,45 @@ class MainWindow(QMainWindow):
         self.theme_timer = QTimer(self)
         self.theme_timer.timeout.connect(self.check_system_theme)
         self.theme_timer.start(1000)
+
+    def create_signature_section(self):
+        group = QGroupBox(self.lang.t("signature.group"))
+        group.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        layout = QVBoxLayout(group)
+
+        row_layout, self.clear_signature_button = self.create_select_row(
+            self.lang.t("signature.select"),
+            self.select_signature,
+            self.clear_signature,
+            lambda btn: self.show_history_menu(
+                self.signature_label,
+                "signature",
+                btn,
+            ),
+        )
+
+        self.signature_label = ClickablePathLabel(
+            "signature",
+            clear_button=self.clear_signature_button,
+            parent=self,
+        )
+
+        self.signature_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
+
+        self.signature_label.pathChanged.connect(
+            self.update_operation_buttons_state
+        )
+
+        layout.addWidget(self.signature_label)
+        layout.addLayout(row_layout)
+
+        return group
 
     def _initialize_default_settings(self):
         preferred_languages = [
@@ -118,7 +190,7 @@ class MainWindow(QMainWindow):
     def create_select_row(self, text, select_callback, clear_callback, history_callback=None):
         layout = QHBoxLayout()
 
-        history_button = QPushButton("☰")
+        history_button = AnimatedButton("☰")
         history_button.setFixedSize(28, 28)
         history_button.setObjectName("historyButton")
 
@@ -127,9 +199,9 @@ class MainWindow(QMainWindow):
                 lambda: history_callback(history_button)
             )
 
-        select_button = QPushButton(text)
+        select_button = AnimatedButton(text)
 
-        clear_button = QPushButton("×")
+        clear_button = AnimatedButton("×")
         clear_button.setObjectName("clearButton")
         clear_button.setFixedSize(28, 28)
         clear_button.setEnabled(False)
@@ -145,6 +217,10 @@ class MainWindow(QMainWindow):
 
     def create_file_section(self):
         group = QGroupBox(self.lang.t("file.group"))
+        group.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
         layout = QVBoxLayout(group)
 
         row_layout, self.clear_file_button = self.create_select_row(
@@ -169,6 +245,10 @@ class MainWindow(QMainWindow):
 
     def create_key_section(self):
         self.key_group = QGroupBox(self.lang.t("key.group"))
+        self.key_group.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
         self.key_layout = QVBoxLayout(self.key_group)
 
         self.single_key_widget = self.create_single_key()
@@ -203,7 +283,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.key_label)
         layout.addLayout(row_layout)
 
-        self.generate_key_button = QPushButton(self.lang.t("key.generate"))
+        self.generate_key_button = AnimatedButton(self.lang.t("key.generate"))
         self.generate_key_button.clicked.connect(lambda: self.generate_key("symmetric", False))
 
         layout.addWidget(self.generate_key_button)
@@ -252,10 +332,10 @@ class MainWindow(QMainWindow):
         public_layout.addWidget(self.public_key_label)
         public_layout.addLayout(row_layout)
         
-        self.generate_private_key_button = QPushButton(self.lang.t("key.generate.private"))
+        self.generate_private_key_button = AnimatedButton(self.lang.t("key.generate.private"))
         self.generate_private_key_button.clicked.connect(lambda: self.generate_key("asymmetric", False))
         
-        self.generate_public_key_button = QPushButton(self.lang.t("key.generate.public"))
+        self.generate_public_key_button = AnimatedButton(self.lang.t("key.generate.public"))
         self.generate_public_key_button.clicked.connect(lambda: self.generate_key("asymmetric", True))
         
         private_layout.addWidget(self.generate_private_key_button)
@@ -274,16 +354,99 @@ class MainWindow(QMainWindow):
         top_row_layout = QHBoxLayout()
         top_row_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.algorithm_combo = QComboBox()
-        self.algorithm_combo.addItems(list(ALGORITHMS.keys()))
+        self.algorithm_combo = AnimatedComboBox()
+        self.algorithm_combo.setObjectName("algorithmCombo")
+        self.algorithm_combo.setItemDelegate(StreamingComboDelegate(self.algorithm_combo))
+        self.algorithm_combo.setLabelDrawingMode(QComboBox.LabelDrawingMode.UseDelegate)
+
+        def add_algorithm_header(text):
+            self.algorithm_combo.addItem(text)
+
+            index = self.algorithm_combo.count() - 1
+
+            self.algorithm_combo.setItemData(
+                index,
+                True,
+                ALGORITHM_HEADER_ROLE,
+            )
+
+            item = self.algorithm_combo.model().item(index)
+
+            if item:
+                item.setEnabled(False)
+                item.setSelectable(False)
+
+
+        def add_algorithm_item(
+            algorithm_name,
+            algorithm,
+        ):
+            self.algorithm_combo.addItem(
+                algorithm_name
+            )
+
+            mode_streaming = algorithm.get(
+                "mode_streaming"
+            )
+
+            if mode_streaming is not None:
+                is_streaming = any(
+                    mode_streaming.values()
+                )
+            else:
+                is_streaming = algorithm.get(
+                    "streaming",
+                    False,
+                )
+
+            index = self.algorithm_combo.count() - 1
+
+            self.algorithm_combo.setItemData(
+                index,
+                is_streaming,
+                STREAMING_ROLE,
+            )
+
+
+        add_algorithm_header(
+            self.lang.t(
+                "algorithm.category.encryption"
+            )
+        )
+
+        for algorithm_name, algorithm in ALGORITHMS.items():
+            if algorithm_name not in SIGNATURE_ALGORITHMS:
+                add_algorithm_item(
+                    algorithm_name,
+                    algorithm,
+                )
+
+        add_algorithm_header(
+            self.lang.t(
+                "algorithm.category.signatures"
+            )
+        )
+
+        for algorithm_name, algorithm in ALGORITHMS.items():
+            if algorithm_name in SIGNATURE_ALGORITHMS:
+                add_algorithm_item(
+                    algorithm_name,
+                    algorithm,
+                )
+
+        aes_index = self.algorithm_combo.findText("AES")
+
+        if aes_index >= 0:
+            self.algorithm_combo.setCurrentIndex(aes_index)
+
         self.algorithm_combo.currentTextChanged.connect(self.update_algorithm_params)
 
-        self.algorithm_info_button = QPushButton("?")
+        self.algorithm_info_button = AnimatedButton("?")
         self.algorithm_info_button.setFixedSize(28, 28)
         self.algorithm_info_button.setObjectName("infoButton")
-        # self.algorithm_info_button.clicked.connect(self.show_algorithm_info)
+        self.algorithm_info_button.clicked.connect(self.show_algorithm_info)
 
-        self.toggle_params_button = QPushButton(self.lang.t("algorithm.show.settings"))
+        self.toggle_params_button = AnimatedButton(self.lang.t("algorithm.show.settings"))
         self.toggle_params_button.setCheckable(True)
         self.toggle_params_button.toggled.connect(self.toggle_algorithm_params)
 
@@ -302,23 +465,44 @@ class MainWindow(QMainWindow):
 
         return self.algorithm_group
 
+    def show_algorithm_info(self):
+        algorithm_name = self.algorithm_combo.currentText()
+        algorithm = ALGORITHMS.get(algorithm_name)
+
+        if not algorithm:
+            return
+
+        selected_mode = None
+
+        if algorithm.get("modes") and hasattr(self, "mode_combo"):
+            selected_mode = self.mode_combo.currentText()
+
+        dialog = AlgorithmInfoDialog(
+            algorithm_name,
+            algorithm,
+            selected_mode,
+            self.lang,
+            self,
+        )
+        dialog.exec()
+
     def create_operations_section(self):
         group = QGroupBox(self.lang.t("operations.group"))
         layout = QVBoxLayout(group)
 
         buttons_layout = QHBoxLayout()
 
-        self.encrypt_sign_button = QPushButton(self.lang.t("operations.encrypt"))
+        self.encrypt_sign_button = AnimatedButton(self.lang.t("operations.encrypt"))
         self.encrypt_sign_button.clicked.connect(self.start_encrypt_sign)
         self.encrypt_sign_button.setEnabled(False)
-        self.decrypt_verify_button = QPushButton(self.lang.t("operations.decrypt"))
+        self.decrypt_verify_button = AnimatedButton(self.lang.t("operations.decrypt"))
         self.decrypt_verify_button.clicked.connect(self.start_decrypt_verify)
         self.decrypt_verify_button.setEnabled(False)
 
         buttons_layout.addWidget(self.encrypt_sign_button)
         buttons_layout.addWidget(self.decrypt_verify_button)
 
-        self.cancel_button = QPushButton(self.lang.t("operations.cancel"))
+        self.cancel_button = AnimatedButton(self.lang.t("operations.cancel"))
         self.cancel_button.clicked.connect(self.cancel_operation)
         self.cancel_button.setObjectName("cancelButton")
         self.cancel_button.setEnabled(False)
@@ -333,8 +517,11 @@ class MainWindow(QMainWindow):
 
     def update_algorithm_params(self, algorithm_name):
         algorithm = ALGORITHMS.get(algorithm_name)
+
         if not algorithm:
             return
+
+        self.signature_group.setVisible(algorithm_name in SIGNATURE_ALGORITHMS)
 
         if algorithm["type"] == "asymmetric":
             self.key_group.setTitle(self.lang.t("keys.group"))
@@ -349,6 +536,17 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         self.clear_layout(layout)
 
+        for attr in (
+            "key_lengths_combo",
+            "mode_combo",
+            "hashes_combo",
+            "paddings_combo",
+            "curves_combo",
+            "parameter_sets_combo",
+        ):
+            if hasattr(self, attr):
+                delattr(self, attr)
+
         left_column = QVBoxLayout()
         middle_column = QVBoxLayout()
         right_column = QVBoxLayout()
@@ -359,7 +557,7 @@ class MainWindow(QMainWindow):
 
             if key_lengths:
                 key_lengths_label = QLabel(self.lang.t("algorithm.key.length"))
-                self.key_lengths_combo = QComboBox()
+                self.key_lengths_combo = AnimatedComboBox()
                 self.key_lengths_combo.addItems([str(k) for k in key_lengths])
                 if len(key_lengths) == 1:
                     self.key_lengths_combo.setEnabled(False)
@@ -368,10 +566,26 @@ class MainWindow(QMainWindow):
 
             if modes:
                 mode_label = QLabel(self.lang.t("algorithm.mode"))
-                self.mode_combo = QComboBox()
-                self.mode_combo.addItems(modes)
+                self.mode_combo = AnimatedComboBox()
+                self.mode_combo.setItemDelegate(StreamingComboDelegate(self.mode_combo))
+                self.mode_combo.setLabelDrawingMode(QComboBox.LabelDrawingMode.UseDelegate)
+
+                mode_streaming = algorithm.get("mode_streaming", {})
+
+                for mode_name in modes:
+                    self.mode_combo.addItem(mode_name)
+
+                    index = self.mode_combo.count() - 1
+                    is_streaming = mode_streaming.get(
+                        mode_name,
+                        algorithm.get("streaming", False),
+                    )
+
+                    self.mode_combo.setItemData(index, is_streaming, STREAMING_ROLE)
+
                 if len(modes) == 1:
                     self.mode_combo.setEnabled(False)
+
                 right_column.addWidget(mode_label)
                 right_column.addWidget(self.mode_combo)
 
@@ -404,19 +618,36 @@ class MainWindow(QMainWindow):
             hashes = algorithm.get("hashes", [])
             paddings = algorithm.get("paddings", [])
             curves = algorithm.get("curves", [])
+            parameter_sets = algorithm.get("parameter_sets", [])
 
             if curves:
-                curves_label = QLabel(self.lang.t("algorithm.curves"))
-                self.curves_combo = QComboBox()
+                curves_label = QLabel(self.lang.t("algorithm.curve"))
+                self.curves_combo = AnimatedComboBox()
                 self.curves_combo.addItems(curves)
                 if len(curves) == 1:
                     self.curves_combo.setEnabled(False)
                 left_column.addWidget(curves_label)
                 left_column.addWidget(self.curves_combo)
 
+            if parameter_sets:
+                parameter_sets_label = QLabel(
+                    self.lang.t("algorithm.parameter.set")
+                )
+
+                self.parameter_sets_combo = AnimatedComboBox()
+                self.parameter_sets_combo.addItems(parameter_sets)
+
+                if len(parameter_sets) == 1:
+                    self.parameter_sets_combo.setEnabled(False)
+
+                left_column.addWidget(parameter_sets_label)
+                left_column.addWidget(
+                    self.parameter_sets_combo
+                )
+
             if key_lengths:
                 key_lengths_label = QLabel(self.lang.t("algorithm.key.length"))
-                self.key_lengths_combo = QComboBox()
+                self.key_lengths_combo = AnimatedComboBox()
                 self.key_lengths_combo.addItems([str(k) for k in key_lengths])
                 if len(key_lengths) == 1:
                     self.key_lengths_combo.setEnabled(False)
@@ -425,7 +656,7 @@ class MainWindow(QMainWindow):
 
             if paddings:
                 paddings_label = QLabel(self.lang.t("algorithm.padding"))
-                self.paddings_combo = QComboBox()
+                self.paddings_combo = AnimatedComboBox()
                 self.paddings_combo.addItems(paddings)
                 if len(paddings) == 1:
                     self.paddings_combo.setEnabled(False)
@@ -433,13 +664,39 @@ class MainWindow(QMainWindow):
                 middle_column.addWidget(self.paddings_combo)
 
             if hashes:
-                hashes_label = QLabel(self.lang.t("algorithm.hashes"))
-                self.hashes_combo = QComboBox()
+                hashes_label = QLabel(self.lang.t("algorithm.hash"))
+                self.hashes_combo = AnimatedComboBox()
                 self.hashes_combo.addItems(hashes)
                 if len(hashes) == 1:
                     self.hashes_combo.setEnabled(False)
                 right_column.addWidget(hashes_label)
                 right_column.addWidget(self.hashes_combo)
+
+            if algorithm_name == "ECDSA":
+                def sync_ecdsa_hash(curve_name):
+                    defaults = {
+                        "P-521 (secp521r1)": "SHA3-512",
+                        "P-384 (secp384r1)": "SHA3-384",
+                        "P-256 (secp256r1)": "SHA3-256",
+                    }
+
+                    hash_name = defaults.get(curve_name)
+
+                    if not hash_name:
+                        return
+
+                    index = self.hashes_combo.findText(hash_name)
+
+                    if index >= 0:
+                        self.hashes_combo.setCurrentIndex(index)
+
+                sync_ecdsa_hash(
+                    self.curves_combo.currentText()
+                )
+
+                self.curves_combo.currentTextChanged.connect(
+                    sync_ecdsa_hash
+                )
 
         self.update_operation_buttons_state()
 
@@ -468,7 +725,9 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "encrypt_sign_button") or not hasattr(self, "decrypt_verify_button"):
             return
 
-        algorithm = ALGORITHMS.get(self.algorithm_combo.currentText())
+        algorithm_name = self.algorithm_combo.currentText()
+        algorithm = ALGORITHMS.get(algorithm_name)
+
         if not algorithm:
             self.encrypt_sign_button.setEnabled(False)
             self.decrypt_verify_button.setEnabled(False)
@@ -478,20 +737,62 @@ class MainWindow(QMainWindow):
         is_file_selected = bool(file_path)
         is_enc_file = is_file_selected and file_path.lower().endswith(".enc")
 
-        if algorithm["type"] == "asymmetric":
-            has_keys = bool(self.private_key_label.path and self.public_key_label.path)
-        else:
-            has_keys = bool(self.key_label.path)
+        if algorithm_name in SIGNATURE_ALGORITHMS:
+            self.encrypt_sign_button.setText(
+                self.lang.t("operations.sign")
+            )
+            self.decrypt_verify_button.setText(
+                self.lang.t("operations.verify")
+            )
 
-        self.encrypt_sign_button.setEnabled(is_file_selected and has_keys and not is_enc_file)
-        self.decrypt_verify_button.setEnabled(is_file_selected and has_keys and is_enc_file)
+            self.encrypt_sign_button.setEnabled(
+                is_file_selected
+                and bool(self.private_key_label.path)
+            )
 
-        if self.algorithm_combo.currentText() in ("EdDSA", "ECDSA"):
-            self.encrypt_sign_button.setText(self.lang.t("operations.sign"))
-            self.decrypt_verify_button.setText(self.lang.t("operations.verify"))
-        else:
-            self.encrypt_sign_button.setText(self.lang.t("operations.encrypt"))
-            self.decrypt_verify_button.setText(self.lang.t("operations.decrypt"))
+            self.decrypt_verify_button.setEnabled(
+                is_file_selected
+                and bool(self.public_key_label.path)
+                and bool(self.signature_label.path)
+            )
+
+            return
+
+        self.encrypt_sign_button.setText(
+            self.lang.t("operations.encrypt")
+        )
+        self.decrypt_verify_button.setText(
+            self.lang.t("operations.decrypt")
+        )
+
+        if algorithm_name == "RSA-OAEP":
+            self.encrypt_sign_button.setEnabled(
+                is_file_selected
+                and bool(self.public_key_label.path)
+                and not is_enc_file
+            )
+
+            self.decrypt_verify_button.setEnabled(
+                is_file_selected
+                and bool(self.private_key_label.path)
+                and is_enc_file
+            )
+
+            return
+
+        has_key = bool(self.key_label.path)
+
+        self.encrypt_sign_button.setEnabled(
+            is_file_selected
+            and has_key
+            and not is_enc_file
+        )
+
+        self.decrypt_verify_button.setEnabled(
+            is_file_selected
+            and has_key
+            and is_enc_file
+        )
 
     def open_settings(self):
         dialog = SettingsDialog(self)
@@ -567,6 +868,24 @@ class MainWindow(QMainWindow):
     def clear_file(self):
         self.file_label.clearPath()
 
+    def select_signature(self):
+        options = QFileDialog.Option()
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            self.lang.t("signature.select"),
+            "",
+            "Signature Files (*.sig);;All Files (*)",
+            options=options,
+        )
+
+        if path:
+            self.signature_label.setPath(path)
+            self.history.add(path, "signature")
+
+    def clear_signature(self):
+        self.signature_label.clearPath()
+
     def select_key(self):
         options = QFileDialog.Option()
         path, _ = QFileDialog.getOpenFileName(self, self.lang.t("key.select"), "", "Key Files (*.key);;All Files (*)", options=options)
@@ -597,50 +916,218 @@ class MainWindow(QMainWindow):
         self.public_key_label.clearPath()
 
     def generate_key(self, key_type="symmetric", public=False):
-        options = QFileDialog.Option()
+        if (
+            self.key_generation_worker
+            and self.key_generation_worker.isRunning()
+        ):
+            return
 
         if key_type == "symmetric" and public:
             return
-        
-        if key_type == "asymmetric" and public and not self.private_key_label.path:
-            QMessageBox.warning(self, self.lang.t("warning"), self.lang.t("key.error.2"))
+
+        if (
+            key_type == "asymmetric"
+            and public
+            and not self.private_key_label.path
+        ):
+            QMessageBox.warning(
+                self,
+                self.lang.t("warning"),
+                self.lang.t("key.error.2"),
+            )
             return
+
+        options = QFileDialog.Option()
 
         if key_type == "asymmetric" and not public:
-            key_path, _ = QFileDialog.getSaveFileName(self, self.lang.t("key.save.private"), self.lang.t("key.private.file"), "Key Files (*.key);;All Files (*)", options=options)
-        elif key_type == "asymmetric" and public:
-            key_path, _ = QFileDialog.getSaveFileName(self, self.lang.t("key.save.public"), self.lang.t("key.public.file"), "Key Files (*.key);;All Files (*)", options=options)
-        else:
-            key_path, _ = QFileDialog.getSaveFileName(self, self.lang.t("key.save"), self.lang.t("key.file"), "Key Files (*.key);;All Files (*)", options=options)
-        if not key_path:
-            return
-        
-        try:
-            generated_path = generate_key(
-                key_type,
-                public,
-                self.private_key_label.path if key_type == "asymmetric" and public else "",
-                self.algorithm_combo.currentText(),
-                int(self.key_lengths_combo.currentText()),
-                key_path,
-                self.mode_combo.currentText() if hasattr(self, "mode_combo") else None
+            key_path, _ = QFileDialog.getSaveFileName(
+                self,
+                self.lang.t("key.save.private"),
+                self.lang.t("key.private.file"),
+                "Key Files (*.key);;All Files (*)",
+                options=options,
             )
 
-            if key_type == "asymmetric":
-                if public:
-                    self.public_key_label.setPath(generated_path)
-                else:
-                    self.private_key_label.setPath(generated_path)
+        elif key_type == "asymmetric" and public:
+            key_path, _ = QFileDialog.getSaveFileName(
+                self,
+                self.lang.t("key.save.public"),
+                self.lang.t("key.public.file"),
+                "Key Files (*.key);;All Files (*)",
+                options=options,
+            )
+
+        else:
+            key_path, _ = QFileDialog.getSaveFileName(
+                self,
+                self.lang.t("key.save"),
+                self.lang.t("key.file"),
+                "Key Files (*.key);;All Files (*)",
+                options=options,
+            )
+
+        if not key_path:
+            return
+
+        private_key_path = (
+            self.private_key_label.path
+            if key_type == "asymmetric" and public
+            else ""
+        )
+
+        algorithm_name = self.algorithm_combo.currentText()
+
+        key_length_bits = (
+            int(self.key_lengths_combo.currentText())
+            if hasattr(self, "key_lengths_combo")
+            else None
+        )
+
+        curve = (
+            self.curves_combo.currentText()
+            if hasattr(self, "curves_combo")
+            else None
+        )
+
+        mode = (
+            self.mode_combo.currentText()
+            if hasattr(self, "mode_combo")
+            else None
+        )
+
+        self.key_generation_worker = KeyGenerationWorker(
+            key_type=key_type,
+            public=public,
+            private_key_path=private_key_path,
+            algorithm_name=algorithm_name,
+            key_length_bits=key_length_bits,
+            output_path=key_path,
+            mode=mode,
+            lang=self.lang,
+            curve=curve,
+        )
+
+        self.key_generation_worker.generated.connect(
+            self.on_key_generated
+        )
+
+        self.key_generation_worker.failed.connect(
+            self.on_key_generation_error
+        )
+
+        self.key_generation_worker.finished.connect(
+            self.on_key_generation_finished
+        )
+
+        self.set_key_generation_running(True)
+
+        self.key_generation_worker.start()
+
+    def on_key_generated(
+        self,
+        generated_path: str,
+        key_type: str,
+        public: bool,
+    ):
+        if key_type == "asymmetric":
+            if public:
+                self.public_key_label.setPath(
+                    generated_path
+                )
             else:
-                self.key_label.setPath(generated_path)
+                self.private_key_label.setPath(
+                    generated_path
+                )
+        else:
+            self.key_label.setPath(
+                generated_path
+            )
 
-            message = self.lang.t("key.generate.public.success") if public else self.lang.t("key.generate.private.success") if key_type == "asymmetric" else self.lang.t("key.generate.success")
-            QMessageBox.information(self, self.lang.t("success"), message)
-        except Exception as e:
-            message = self.lang.t("key.error.10") if public else self.lang.t("key.error.9") if key_type == "asymmetric" else self.lang.t("key.error.8")
-            QMessageBox.critical(self, self.lang.t("error"), message + str(e))
+        if key_type == "asymmetric":
+            if public:
+                self.history.add(
+                    generated_path,
+                    "public_key",
+                )
+            else:
+                self.history.add(
+                    generated_path,
+                    "private_key",
+                )
+        else:
+            self.history.add(
+                generated_path,
+                "key",
+            )
 
-    def show_history_menu(self, target_label: "ClickablePathLabel", item_type: str, button: QPushButton):
+        if key_type == "asymmetric":
+            message = (
+                self.lang.t(
+                    "key.generate.public.success"
+                )
+                if public
+                else self.lang.t(
+                    "key.generate.private.success"
+                )
+            )
+        else:
+            message = self.lang.t(
+                "key.generate.success"
+            )
+
+        QMessageBox.information(
+            self,
+            self.lang.t("success"),
+            message,
+        )
+
+    def on_key_generation_error(
+        self,
+        error: str,
+        key_type: str,
+        public: bool,
+    ):
+        if key_type == "asymmetric":
+            message = (
+                self.lang.t("key.error.10")
+                if public
+                else self.lang.t("key.error.9")
+            )
+        else:
+            message = self.lang.t(
+                "key.error.8"
+            )
+
+        QMessageBox.critical(
+            self,
+            self.lang.t("error"),
+            message + error,
+        )
+
+    def on_key_generation_finished(self):
+        self.set_key_generation_running(False)
+
+        if self.key_generation_worker:
+            self.key_generation_worker.deleteLater()
+            self.key_generation_worker = None
+
+    def set_key_generation_running(self, running: bool):
+        self.key_group.setEnabled(not running)
+        self.algorithm_group.setEnabled(not running)
+
+    @staticmethod
+    def _history_translation_key(item_type: str, action: str) -> str:
+        prefixes = {
+            "file": "file",
+            "key": "key",
+            "private_key": "key.private",
+            "public_key": "key.public",
+            "signature": "signature",
+        }
+
+        return f"{prefixes[item_type]}.history.{action}"
+
+    def show_history_menu(self, target_label: "ClickablePathLabel", item_type: str, button: AnimatedButton):
         if self._ignore_history_button is button:
             self._ignore_history_button = None
             return
@@ -657,7 +1144,7 @@ class MainWindow(QMainWindow):
         clear_widget = QWidget()
         clear_layout = QHBoxLayout(clear_widget)
         clear_layout.setContentsMargins(0, 0, 0, 0)
-        message = self.lang.t("file.history.clear") if item_type == "file" else self.lang.t("key.history.clear") if item_type == "key" else self.lang.t("key.private.history.clear") if item_type == "private_key" else self.lang.t("key.public.history.clear")
+        message = self.lang.t(self._history_translation_key(item_type, "clear"))
         clear_label = QLabel(message)
         clear_label.setObjectName("historyLabel")
         clear_label.mousePressEvent = lambda event: (self.clear_history(item_type), refresh_menu()) if event.button() == Qt.LeftButton else None
@@ -673,7 +1160,7 @@ class MainWindow(QMainWindow):
             empty_widget = QWidget()
             empty_layout = QHBoxLayout(empty_widget)
             empty_layout.setContentsMargins(0, 0, 0, 0)
-            message = self.lang.t("file.history.empty") if item_type == "file" else self.lang.t("key.history.empty") if item_type == "key" else self.lang.t("key.private.history.empty") if item_type == "private_key" else self.lang.t("key.public.history.empty")
+            message = self.lang.t(self._history_translation_key(item_type, "empty"))
             empty_label = QLabel(message)
             empty_label.setObjectName("historyLabel")
             empty_layout.addWidget(empty_label)
@@ -737,79 +1224,209 @@ class MainWindow(QMainWindow):
         self.history.remove(path, item_type)
 
     def start_encrypt_sign(self):
-        self.start_crypto_task(encrypt=True)
+        algorithm = self.algorithm_combo.currentText()
+
+        operation = (
+            "sign"
+            if algorithm in SIGNATURE_ALGORITHMS
+            else "encrypt"
+        )
+
+        self.start_crypto_task(operation)
 
     def start_decrypt_verify(self):
-        self.start_crypto_task(encrypt=False)
+        algorithm = self.algorithm_combo.currentText()
 
-    def start_crypto_task(self, encrypt: bool):
-        self.current_encrypt_operation = encrypt
-        self._crypto_start_time = time()
-        self._memory_samples.clear()
-        self._memory_timer.start(1000)
+        operation = (
+            "verify"
+            if algorithm in SIGNATURE_ALGORITHMS
+            else "decrypt"
+        )
 
-        if sys.platform == "win32":
-            self.taskbar_progress.set_progress_type(ProgressType.NORMAL)
+        self.start_crypto_task(operation)
+
+    def start_crypto_task(self, operation: str):
+        self._operation_cancelled = False
+        self.current_operation = operation
 
         algorithm = self.algorithm_combo.currentText()
         input_file = self.file_label.path
 
-        options = QFileDialog.Option()
-        filename, ext = os.path.splitext(os.path.basename(input_file))
-        if encrypt:
-            default_name = filename + ext + ".enc"
-        else:
-            if ext.lower() == ".enc":
-                filename, ext2 = os.path.splitext(filename)
-                default_name = filename + ".dec" + ext2
+        output_file = None
+
+        if operation == "sign":
+            options = QFileDialog.Option()
+
+            default_name = os.path.basename(input_file) + ".sig"
+
+            output_file, _ = QFileDialog.getSaveFileName(
+                self,
+                self.lang.t("signature.save"),
+                default_name,
+                "Signature Files (*.sig);;All Files (*)",
+                options=options,
+            )
+
+            if not output_file:
+                return
+
+            if not output_file.lower().endswith(".sig"):
+                output_file += ".sig"
+
+        elif operation in ("encrypt", "decrypt"):
+            options = QFileDialog.Option()
+
+            input_name = os.path.basename(input_file)
+            filename, ext = os.path.splitext(input_name)
+
+            if operation == "encrypt":
+                default_name = input_name + ".enc"
+
+                output_file, _ = QFileDialog.getSaveFileName(
+                    self,
+                    self.lang.t("file.save"),
+                    default_name,
+                    "Encrypted Files (*.enc);;All Files (*)",
+                    options=options,
+                )
+
+                if not output_file:
+                    return
+
+                if not output_file.lower().endswith(".enc"):
+                    output_file += ".enc"
+
             else:
-                default_name = filename + ".dec" + ext
-        output_file, _ = QFileDialog.getSaveFileName(
-            self,
-            self.lang.t("file.save"),
-            default_name,
-            "All Files (*);;Encrypted Files (*.enc)",
-            options=options
-        )
-        if not output_file:
-            return
-        
+                if ext.lower() == ".enc":
+                    default_name = filename
+                    original_ext = os.path.splitext(filename)[1]
+                else:
+                    default_name = filename + ".dec" + ext
+                    original_ext = ext
+
+                if original_ext:
+                    file_filter = (
+                        f"{self.lang.t('file.original.type')} "
+                        f"(*{original_ext});;"
+                        f"{self.lang.t('file.all.types')} (*)"
+                    )
+                else:
+                    file_filter = (
+                        f"{self.lang.t('file.all.types')} (*)"
+                    )
+
+                output_file, _ = QFileDialog.getSaveFileName(
+                    self,
+                    self.lang.t("file.save"),
+                    default_name,
+                    file_filter,
+                    options=options,
+                )
+
+                if not output_file:
+                    return
+
+        self._crypto_start_time = time()
+        self._memory_samples.clear()
+        self._sample_memory()
+        self._memory_timer.start(500)
+
+        if sys.platform == "win32":
+            self.taskbar_progress.set_progress_type(
+                ProgressType.NORMAL
+            )
+            self.taskbar_progress.set_progress(0)
+
         self.encrypt_sign_button.setEnabled(False)
         self.decrypt_verify_button.setEnabled(False)
 
         params = {
-            "mode": self.mode_combo.currentText() if hasattr(self, "mode_combo") else None,
-            "key_length": int(self.key_lengths_combo.currentText()) if hasattr(self, "key_lengths_combo") else None,
-            "hash": self.hashes_combo.currentText() if hasattr(self, "hashes_combo") else None,
-            "padding": self.paddings_combo.currentText() if hasattr(self, "paddings_combo") else None,
-            "curve": self.curves_combo.currentText() if hasattr(self, "curves_combo") else None,
+            "mode": (
+                self.mode_combo.currentText()
+                if hasattr(self, "mode_combo")
+                else None
+            ),
+            "key_length": (
+                int(self.key_lengths_combo.currentText())
+                if hasattr(self, "key_lengths_combo")
+                else None
+            ),
+            "hash": (
+                self.hashes_combo.currentText()
+                if hasattr(self, "hashes_combo")
+                else None
+            ),
+            "padding": (
+                self.paddings_combo.currentText()
+                if hasattr(self, "paddings_combo")
+                else None
+            ),
+            "curve": (
+                self.curves_combo.currentText()
+                if hasattr(self, "curves_combo")
+                else None
+            ),
+            "parameter_set": (
+                self.parameter_sets_combo.currentText()
+                if hasattr(self, "parameter_sets_combo")
+                else None
+            ),
         }
 
+        if algorithm in ("RSA-OAEP", "ML-KEM"):
+            crypto_key_path = (
+                self.public_key_label.path
+                if operation == "encrypt"
+                else self.private_key_label.path
+            )
+        else:
+            crypto_key_path = self.key_label.path
+
         self.worker = CryptoWorker(
-            operation="encrypt" if encrypt else "decrypt",
+            operation=operation,
             algorithm_name=algorithm,
             input_file=input_file,
             output_file=output_file,
-            key_path=self.key_label.path,
+            key_path=crypto_key_path,
             private_key_path=self.private_key_label.path,
             public_key_path=self.public_key_label.path,
+            signature_path=self.signature_label.path,
             params=params,
-            lang=self.lang
+            lang=self.lang,
         )
 
-        self.worker.progress.connect(self.progress_bar.setValue)
+        self.worker.progress.connect(
+            self.on_crypto_progress
+        )
 
-        if sys.platform == "win32":
-            self.worker.progress.connect(lambda val: self.taskbar_progress.set_progress(val))
+        self.worker.finished.connect(
+            self.on_crypto_finished
+        )
 
-        self.worker.finished.connect(self.on_crypto_finished)
-        self.worker.error.connect(self.on_crypto_error)
+        self.worker.verification_finished.connect(
+            self.on_verification_finished
+        )
+
+        self.worker.error.connect(
+            self.on_crypto_error
+        )
 
         self.progress_bar.setValue(0)
         self.cancel_button.setEnabled(True)
         self.worker.start()
 
+    def on_crypto_progress(self, value: int):
+        if getattr(self, "_operation_cancelled", False):
+            return
+
+        self.progress_bar.setValue(value)
+
+        if sys.platform == "win32":
+            self.taskbar_progress.set_progress(value)
+
     def cancel_operation(self):
+        self._operation_cancelled = True
+
         if hasattr(self, "worker") and self.worker.isRunning():
             self.worker.cancel()
 
@@ -830,11 +1447,13 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.update_operation_buttons_state()
 
-    def on_crypto_finished(self):
+    def on_crypto_finished(self, output_file=""):
         self.cancel_button.setEnabled(False)
 
         if sys.platform == "win32":
             self.taskbar_progress.flash_done()
+
+        self._sample_memory()
 
         if hasattr(self, "_memory_timer"):
             self._memory_timer.stop()
@@ -851,10 +1470,32 @@ class MainWindow(QMainWindow):
         else:
             avg_ram = "—"
 
-        if getattr(self, "current_encrypt_operation", True):
-            message = self.lang.t("operations.encryption.success")
+        operation = getattr(
+            self,
+            "current_operation",
+            "encrypt",
+        )
+
+        if operation == "encrypt":
+            message = self.lang.t(
+                "operations.encryption.success"
+            )
+        elif operation == "decrypt":
+            message = self.lang.t(
+                "operations.decryption.success"
+            )
+        elif operation == "sign":
+            message = self.lang.t(
+                "operations.signing.success"
+            )
         else:
-            message = self.lang.t("operations.decryption.success")
+            message = self.lang.t(
+                "operations.encryption.success"
+            )
+
+        if operation == "sign" and output_file:
+            self.signature_label.setPath(output_file)
+            self.history.add(output_file, "signature")
 
         QMessageBox.information(
             self,
@@ -880,6 +1521,40 @@ class MainWindow(QMainWindow):
             self.lang.t("error"),
             message
         )
+
+        self.progress_bar.setValue(0)
+        self.update_operation_buttons_state()
+
+    def on_verification_finished(self, valid: bool):
+        self.cancel_button.setEnabled(False)
+
+        if hasattr(self, "_memory_timer"):
+            self._memory_timer.stop()
+
+        if valid:
+            if sys.platform == "win32":
+                self.taskbar_progress.flash_done()
+
+            QMessageBox.information(
+                self,
+                self.lang.t("success"),
+                self.lang.t("operations.verification.valid"),
+            )
+        else:
+            if sys.platform == "win32":
+                self.taskbar_progress.set_progress_type(
+                    ProgressType.ERROR
+                )
+                self.taskbar_progress.set_progress(100)
+
+            QMessageBox.critical(
+                self,
+                self.lang.t("error"),
+                self.lang.t("operations.verification.invalid"),
+            )
+
+        if sys.platform == "win32":
+            self.taskbar_progress.reset()
 
         self.progress_bar.setValue(0)
         self.update_operation_buttons_state()
@@ -932,327 +1607,3 @@ class MainWindow(QMainWindow):
 
     def apply_dark_theme(self):
         self.load_stylesheet("theme/dark.qss")
-
-class ClickablePathLabel(QLabel):
-    pathChanged = Signal()
-
-    def __init__(self, label_type="file", placeholder=None, clear_button=None, parent=None):       
-        self.label_type = label_type
-        self.lang = parent.lang if parent and hasattr(parent, "lang") else None
-        
-        if placeholder is None:
-            placeholder = self._default_placeholder()
-
-        super().__init__(placeholder, parent)
-        self.path = None
-        self.clear_button = clear_button
-        self.setObjectName("dragAndDropLabel")
-        self.setAcceptDrops(True)
-        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-
-    def _default_placeholder(self):
-        if self.label_type == "file":
-            return self.lang.t("file.none")
-        if self.label_type == "key":
-            return self.lang.t("key.none")
-        if self.label_type == "private_key":
-            return self.lang.t("key.private.none")
-        if self.label_type == "public_key":
-            return self.lang.t("key.public.none")
-
-        return ""
-
-    def setPath(self, path: str):
-        if path and os.path.exists(path):
-            self.path = path
-            self.setText(path)
-            self.setToolTip(f"{self.lang.t('path')}{path}\n{self.lang.t('size')}{self._safe_file_size_fmt(path)}\n{self.lang.t('double-click')}")
-            if self.clear_button:
-                self.clear_button.setEnabled(True)
-            self.pathChanged.emit()
-        else:
-            self.clearPath()
-
-    def clearPath(self):
-        self.path = None
-        self.setText(self._default_placeholder())
-        self.setToolTip("")
-        if self.clear_button:
-            self.clear_button.setEnabled(False)
-        self.pathChanged.emit()
-
-    def mouseDoubleClickEvent(self, event):
-        if self.path and os.path.exists(self.path):
-            folder = os.path.dirname(self.path)
-            if sys.platform == "win32":
-                os.startfile(folder)
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        urls = event.mimeData().urls()
-        if urls:
-            path = urls[0].toLocalFile()
-            self.setPath(path)
-            event.acceptProposedAction()
-
-    @staticmethod
-    def _safe_file_size_fmt(path: str) -> str:
-        try:
-            num = os.path.getsize(path)
-            for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
-                if num < 1024.0:
-                    return f"{num:.1f} {unit}"
-                num /= 1024.0
-            return f"{num:.1f} PiB"
-        except OSError:
-            return "—"
-
-class ButtonOnlySpinBox(QSpinBox):
-    def keyPressEvent(self, event):
-        if event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab):
-            super().keyPressEvent(event)
-            return
-        event.ignore()
-
-class SettingsDialog(QDialog):
-    def __init__(self, parent=None):
-        self.lang = parent.lang if parent and hasattr(parent, "lang") else None
-        super().__init__(parent)
-
-        self.setWindowTitle(self.lang.t("settings.title") if self.lang else "Settings")
-        self.setFixedWidth(400)
-
-        self.parent_window = parent if hasattr(parent, "settings") else None
-        self.settings = self.parent_window.settings
-
-        main_layout = QVBoxLayout(self)
-
-        tabs = QTabWidget()
-        main_layout.addWidget(tabs)
-
-        general_tab = QWidget()
-        general_layout = QVBoxLayout(general_tab)
-        general_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        general_layout.setContentsMargins(10, 10, 10, 10)
-
-        self.language_combo = QComboBox()
-        lang_folder = self.lang.lang_dir
-        for filename in os.listdir(lang_folder):
-            if filename.endswith(".json"):
-                lang_code = filename[:-5]
-                display_name = self.lang.t(f"settings.language.{lang_code}")
-                self.language_combo.addItem(display_name, lang_code)
-
-        current_language = self.settings.value("language", "en")
-        index = self.language_combo.findData(current_language)
-        if index >= 0:
-            self.language_combo.setCurrentIndex(index)
-
-        general_layout.addWidget(QLabel(self.lang.t("settings.language")))
-        general_layout.addWidget(self.language_combo)
-
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItem(self.lang.t("settings.theme.light"), "light")
-        self.theme_combo.addItem(self.lang.t("settings.theme.dark"), "dark")
-        self.theme_combo.addItem(self.lang.t("settings.theme.system"), "system")
-
-        current_theme = self.settings.value("theme", "light")
-        use_system = self.settings.value("use_system_theme", False, type=bool)
-        if use_system:
-            self.theme_combo.setCurrentIndex(2)
-        else:
-            self.theme_combo.setCurrentIndex(0 if current_theme == "light" else 1)
-
-        general_layout.addWidget(QLabel(self.lang.t("settings.theme")))
-        general_layout.addWidget(self.theme_combo)
-
-        tabs.addTab(general_tab, self.lang.t("settings.tab.general"))
-
-        other_tab = QWidget()
-        other_layout = QVBoxLayout(other_tab)
-        other_layout.setAlignment(Qt.AlignmentFlag.AlignTop) 
-        other_layout.setContentsMargins(10, 10, 10, 10)
-
-        self.encryption_combo = QComboBox()
-        self.encryption_combo.addItem(self.lang.t("settings.encryption.always_ask"), "always_ask")
-        self.encryption_combo.addItem(self.lang.t("settings.encryption.auto_delete"), "auto_delete")
-        self.encryption_combo.addItem(self.lang.t("settings.encryption.auto_secure_delete"), "auto_secure_delete")
-        self.encryption_combo.addItem(self.lang.t("settings.encryption.never_delete"), "never_delete")
-
-        current_encryption = self.settings.value("delete_file_after_encryption", "always_ask")
-        index = self.encryption_combo.findData(current_encryption)
-        if index >= 0:
-            self.encryption_combo.setCurrentIndex(index)
-
-        other_layout.addWidget(QLabel(self.lang.t("settings.encryption")))
-        other_layout.addWidget(self.encryption_combo)
-
-        self.decryption_combo = QComboBox()
-        self.decryption_combo.addItem(self.lang.t("settings.decryption.always_ask"), "always_ask")
-        self.decryption_combo.addItem(self.lang.t("settings.decryption.auto_delete"), "auto_delete")
-        self.decryption_combo.addItem(self.lang.t("settings.decryption.never_delete"), "never_delete")
-
-        current_decryption = self.settings.value("delete_file_after_decryption", "always_ask")
-        index = self.decryption_combo.findData(current_decryption)
-        if index >= 0:
-            self.decryption_combo.setCurrentIndex(index)
-
-        other_layout.addWidget(QLabel(self.lang.t("settings.decryption")))
-        other_layout.addWidget(self.decryption_combo)
-
-        self.overwrite_passes_spinbox = ButtonOnlySpinBox()
-        self.overwrite_passes_spinbox.setRange(3, 10)
-        self.overwrite_passes_spinbox.setValue(
-            self.settings.value("secure_delete_passes", 3, type=int)
-        )
-
-        other_layout.addWidget(QLabel(self.lang.t("settings.overwrite.passes")))
-        other_layout.addWidget(self.overwrite_passes_spinbox)
-
-        tabs.addTab(other_tab, self.lang.t("settings.tab.other"))
-
-        close_button = QPushButton(self.lang.t("settings.save.close"))
-        close_button.clicked.connect(self.apply_and_close)
-        main_layout.addWidget(close_button)
-
-    def apply_and_close(self):
-        theme_choice = self.theme_combo.currentData()
-        if theme_choice == "system":
-            self.settings.setValue("use_system_theme", True)
-            self.parent_window.apply_system_theme()
-        else:
-            self.settings.setValue("use_system_theme", False)
-            self.settings.setValue("theme", theme_choice)
-            if theme_choice == "light":
-                self.parent_window.apply_light_theme()
-            else:
-                self.parent_window.apply_dark_theme()
-
-        new_lang = self.language_combo.currentData()
-        current_lang = self.settings.value("language", "en")
-
-        if new_lang != current_lang:
-            msg_box = QMessageBox(self.parent_window)
-            msg_box.setWindowTitle(self.lang.t("information"))
-            msg_box.setText(self.lang.t("settings.restart"))
-            now_button = msg_box.addButton(self.lang.t("now"), QMessageBox.AcceptRole)
-            later_button = msg_box.addButton(self.lang.t("later"), QMessageBox.AcceptRole)
-            cancel_button = msg_box.addButton(self.lang.t("operations.cancel"), QMessageBox.RejectRole)
-            msg_box.setDefaultButton(now_button)
-            msg_box.exec()
-
-            clicked = msg_box.clickedButton()
-            if clicked == now_button:
-                self.settings.setValue("language", new_lang)
-                python = sys.executable
-                os.execl(python, python, *sys.argv)
-            elif clicked == later_button:
-                self.settings.setValue("language", new_lang)
-            elif clicked == cancel_button:
-                index = self.language_combo.findData(current_lang)
-                if index >= 0:
-                    self.language_combo.setCurrentIndex(index)
-                pass
-        else:
-            self.close()
-
-        self.settings.setValue("delete_file_after_encryption", self.encryption_combo.currentData())
-        self.settings.setValue("delete_file_after_decryption", self.decryption_combo.currentData())
-        self.settings.setValue("secure_delete_passes", self.overwrite_passes_spinbox.value())
-
-class HistoryManager:
-    SETTINGS_KEY = "recent_items"
-
-    def __init__(self, settings: QSettings):
-        self.settings = settings
-
-    def get_limit(self) -> int:
-        return self.settings.value("history_limit", 10, type=int)
-
-    def set_limit(self, limit: int):
-        self.settings.setValue("history_limit", max(1, limit))
-        self._trim()
-
-    def load(self) -> list[dict]:
-        return self.settings.value(self.SETTINGS_KEY, [], type=list)
-
-    def save(self, items: list[dict]):
-        self.settings.setValue(self.SETTINGS_KEY, items)
-
-    def add(self, path: str, item_type: str):
-        if not path or not os.path.exists(path):
-            return
-
-        items = self.load()
-
-        items = [
-            item for item in items
-            if not (item["path"] == path and item.get("type") == item_type)
-        ]
-
-        items.append({
-            "path": path,
-            "name": os.path.basename(path),
-            "size": os.path.getsize(path),
-            "type": item_type
-        })
-
-        type_items = [item for item in items if item.get("type") == item_type]
-        other_items = [item for item in items if item.get("type") != item_type]
-
-        type_items = type_items[-self.get_limit():]
-
-        self.save(other_items + type_items)
-
-    def remove(self, path: str, item_type: str):
-        items = [
-            item for item in self.load()
-            if not (item["path"] == path and item.get("type") == item_type)
-        ]
-        self.save(items)
-
-    def clear(self, item_type: str):
-        items = [item for item in self.load() if item.get("type") != item_type]
-        self.save(items)
-
-    def _trim(self):
-        limit = self.get_limit()
-        items = self.load()
-        counts = {}
-        trimmed = []
-
-        for item in reversed(items):
-            item_type = item.get("type")
-            count = counts.get(item_type, 0)
-
-            if count < limit:
-                trimmed.append(item)
-                counts[item_type] = count + 1
-
-        self.save(list(reversed(trimmed)))
-
-class LanguageManager:
-    def __init__(self, settings: QSettings, lang_dir="lang"):
-        self.settings = settings
-        self.lang_dir = lang_dir
-        self.translations = {}
-        self.current_lang = self.settings.value("language", "en")
-
-        self.load_language(self.current_lang)
-
-    def load_language(self, lang: str):
-        path = os.path.join(self.lang_dir, f"{lang}.json")
-        if not os.path.exists(path):
-            return
-
-        with open(path, "r", encoding="utf-8") as f:
-            self.translations = json.load(f)
-
-        self.current_lang = lang
-        self.settings.setValue("language", lang)
-
-    def t(self, key: str) -> str:
-        return self.translations.get(key, key)

@@ -5,5 +5,5 @@ PyCryptodome==3.23.0
 PySkein==1.0
 pyserpent==1.2.0
 xycrypto==0.9
-ascon==0.0.9
+pqcrypto==1.0.0
 psutil==7.2.2

@@ -17,7 +17,6 @@ venv/
 *.env
 *.pdf
 *.docx
-*.py
 test.py
 .vscode/
 *.rar
