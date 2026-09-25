@@ -6,6 +6,7 @@ dist/
 *.bat
 *.log
 *.txt
+!eff_large_wordlist.txt
 *.key
 *.enc
 *.jpg

@@ -1,257 +1,862 @@
 🇵🇱 [Polish version](README_PL.md)
 
-## 🔐 File Encryption and Decryption System with Data Integrity Verification
+# 🔐 File Encryption & Decryption System with Data Integrity Verification
 
-The system allows encryption and decryption of various types of files (text, images, audio, video, etc.) using selected symmetric and asymmetric cryptographic algorithms. Additionally, it implements mechanisms for verifying data integrity.
+A desktop application for encrypting, decrypting, signing, and verifying files using classical, modern, and post-quantum cryptographic algorithms.
+
+The application supports symmetric encryption, asymmetric encryption, key encapsulation mechanisms (KEM), digital signatures, password-based encryption, integrity verification, secure key generation, file metadata, operation cancellation, and multiple GUI themes.
 
 ---
 
 ## ✨ Features
 
-- Encryption and decryption of various types of files (text, images, audio, video, etc.).
-- Support for multiple cryptographic algorithms (AES, 3DES, XChaCha20, Threefish, RSA).
-- Authenticated encryption and data integrity verification (AEAD, MAC, digital signatures).
-- Support for both symmetric and asymmetric keys.
-- Secure file deletion adapted to the storage type (HDD/SSD).
-- Drag and drop file support.
-- Operation progress bar with ETA and cancellation capability.
-- Automatic detection of system light/dark theme.
-- Integration of the progress bar with the Windows taskbar.
+- Encryption and decryption of arbitrary files, including documents, archives, images, audio, and video.
+- Symmetric encryption with multiple block and stream ciphers.
+- Asymmetric encryption with RSA-OAEP.
+- Post-quantum key encapsulation with ML-KEM.
+- Digital signatures with RSA-PSS, EdDSA, ECDSA, ML-DSA, and SLH-DSA.
+- Password-based encryption with Argon2id or PBKDF2-HMAC-SHA256.
+- Built-in password and passphrase generator.
+- Passphrase generation based on the EFF Large Wordlist.
+- Authenticated encryption and integrity verification using AEAD modes, MACs, and digital signatures.
+- Streaming/chunked processing for large files where supported.
+- Automatic metadata storage inside encrypted files.
+- Automatic restoration of algorithm parameters when opening supported `.enc` files.
+- Symmetric and asymmetric key generation.
+- Secure deletion of source files with HDD/SSD-aware handling.
+- Drag and drop support for files and keys.
+- File, key, private key, public key, and signature history.
+- Operation progress bar with percentage, ETA, and cancellation.
+- Windows taskbar progress integration.
+- English and Polish interface.
+- Light, dark, system, and custom QSS themes.
+- Automatic detection of the Windows light/dark mode.
+- Persistent application settings.
 
 ---
 
 ## 🛠️ Technologies
 
-- Python 3.12.
-- PySide6 – graphical user interface (GUI).
-- PyCryptodome – implementation of cryptographic algorithms.
-- PySkein – implementation of the Skein cryptographic primitive (Threefish).
-- psutil – system resource monitoring.
-- PyInstaller – building executable files (.exe).
+- **Python 3.12**
+- **PySide6** – graphical user interface.
+- **PyCryptodome** – cryptographic primitives and algorithms.
+- **cryptography** – modern cryptographic primitives and ECC support.
+- **pqcrypto** – post-quantum cryptographic algorithms.
+- **PySkein** – Skein and Threefish support.
+- **pyserpent** – Serpent implementation.
+- **argon2-cffi** – Argon2id password-based key derivation.
+- **hashlib / PBKDF2-HMAC-SHA256** – PBKDF2 key derivation.
+- **psutil** – process and memory monitoring.
+- **darkdetect** – operating system theme detection.
+- **PyInstaller** – Windows executable packaging.
 
 ---
 
 ## 🔒 Security Notes
 
-This project was created for educational and demonstration purposes. It presents the implementation of various cryptographic algorithms and mechanisms.
+This project was created for educational, portfolio, and demonstration purposes. It presents practical use of multiple cryptographic algorithms, authenticated encryption modes, message authentication codes, password-based key derivation, and digital signatures.
 
-The application supports authenticated encryption modes (AEAD), message authentication codes (MAC), and digital signatures for verifying data integrity.
+Authenticated encryption modes such as AES-GCM, AES-EAX, 3DES-EAX, ChaCha20-Poly1305, XChaCha20-Poly1305, and ASCON provide confidentiality and integrity in a single construction.
 
-Secure file deletion mechanisms are implemented with consideration for different types of storage devices (HDD and SSD). Due to hardware-level mechanisms such as wear leveling on SSDs, complete physical data removal cannot always be guaranteed.
+Other algorithms use additional integrity mechanisms where required, such as Encrypt-then-MAC.
+
+Digital signature algorithms are handled independently from encryption algorithms and can be used to sign and verify files.
+
+Password-based encryption never stores the password itself. Instead, the encrypted file stores the salt and KDF parameters required to derive the key again during decryption.
+
+Argon2id is the recommended password KDF. PBKDF2-HMAC-SHA256 is also available for compatibility.
+
+Secure file deletion is implemented with consideration for HDDs and SSDs. Because of SSD wear leveling, over-provisioning, controller behavior, snapshots, and filesystem behavior, complete physical removal of data cannot always be guaranteed.
 
 ---
 
 ## 🎨 Application GUI
 
-The system allows manual theme switching (light/dark). An Automatic Theme option is also available — when enabled, the application automatically adjusts the theme according to the system settings (Windows). The selected mode is saved and preserved between application launches. 
+The interface supports built-in and custom themes. The selected theme is saved between application launches.
 
-### 🔹 **Light Theme**
+Available theme modes include:
 
-![GUI](https://github.com/user-attachments/assets/46a52655-3a0b-4e35-b979-f0874f4898bf)
+- Light
+- Dark
+- System
+- Custom `.qss` themes detected from the theme directory
 
-### 🔹 **Dark Theme**
+The System mode automatically follows the Windows light/dark appearance.
 
-![GUI 2](https://github.com/user-attachments/assets/5ba3e581-c9e4-4e07-8920-0f12a9d5a41d)
+### 🔹 Main Window
+
+> 📷 Screenshot placeholder — main application window
+
+### 🔹 Light Theme
+
+> 📷 Screenshot placeholder — Light theme
+
+### 🔹 Dark Theme
+
+> 📷 Screenshot placeholder — Dark theme
+
+### 🔹 Custom Themes
+
+> 📷 Screenshot placeholder — Neon Green theme
+
+> 📷 Screenshot placeholder — Arctic Cyan theme
+
+> 📷 Screenshot placeholder — Shadow Monarch theme
+
+> 📷 Screenshot placeholder — Windows 11 theme
 
 ---
 
-## 🔑 Keys
+## 🔑 Key Sources
 
-### 🔹 **Symmetric**
-- The key is generated and stored in a `.key` file.
-- Example of a symmetric key file:
+For symmetric encryption, the application can use either a key file or a password.
 
-![Key](https://github.com/user-attachments/assets/03c99485-6229-4b68-b61a-a9663e879722)
+### 🔹 Key File
 
+A symmetric key can be generated by the application and stored in a `.key` file.
 
-### 🔹 **Asymmetric (RSA)**
-- Keys are generated and stored in separate `.key` files.
-- The public key is generated based on the private key.
-- Example files containing the private and public keys:
+> 📷 Screenshot placeholder — symmetric key file
 
-![Keys](https://github.com/user-attachments/assets/709d0929-bada-4982-961f-aec14899e5a8)
+### 🔹 Password
+
+Instead of a key file, a password can be used to derive the encryption key.
+
+Supported KDFs:
+
+- **Argon2id**
+  - memory-hard password hashing/key derivation
+  - random salt
+  - configurable parameters stored in the encrypted file metadata
+
+- **PBKDF2-HMAC-SHA256**
+  - SHA-256 based PBKDF2
+  - random salt
+  - iteration count stored in encrypted file metadata
+
+The application enforces a minimum password length for new encryption operations while still allowing older encrypted files to be decrypted if their password was created under a different policy.
+
+Passwords may contain spaces, Unicode characters, symbols, and emoji.
+
+> 📷 Screenshot placeholder — password-based encryption
+
+### 🔹 Password Strength Indicator
+
+The GUI includes a password strength indicator that considers password length, character variety, repeated characters, simple sequences, and common weak patterns.
+
+The indicator is intended as a usability aid and is not a formal entropy estimator.
+
+> 📷 Screenshot placeholder — password strength indicator
 
 ---
 
-## 🔢 Implemented Algorithms
+## 🎲 Password & Passphrase Generator
 
-![Algorithms](https://github.com/user-attachments/assets/051ef0d3-b792-4796-a95b-a96ac052528d)
+The application contains a built-in generator for creating passwords without leaving the encryption workflow.
 
-### 🔹 **AES (Advanced Encryption Standard)**
-- **Type:** Symmetric, block cipher.
-- **Structure:** Feistel-like network with operations in the GF(2⁸) field.
-- **Key lengths (bits):** 128, 192, 256.
-- **Modes:** GCM (Galois/Counter Mode) – AEAD, EAX – AEAD, CBC (Cipher Block Chaining), ECB (Electronic Codebook).
-- **Padding:** CBC and ECB modes – PKCS7.
-- **File integrity verification**: AEAD modes (GCM, EAX) – MAC tag (Message Authentication Code).
-- **Maximum file size**: 64 GB.
+### Random password mode
 
-![AES](https://github.com/user-attachments/assets/d471c5da-253a-4017-aa52-801d49394546)
+Options include:
 
-![AES 2](https://github.com/user-attachments/assets/4e2b6967-8f2d-4a4d-ac7a-c20eabd622ba)
+- password length,
+- uppercase letters,
+- digits,
+- symbols.
 
-![AES 3](https://github.com/user-attachments/assets/21f2882f-b421-4f76-a6df-4f9781620bab)
+The generator guarantees that every enabled character class is represented in the generated password.
 
-### 🔹 **3DES (Triple Data Encryption Standard)**
-- **Type:** Symmetric, block cipher.
-- **Structure:** Feistel network (DES applied three times in EDE scheme – encrypt-decrypt-encrypt).
-- **Key lengths (bits):** 192.
-- **Modes:** EAX – AEAD, CFB (Cipher Feedback), OFB (Output Feedback).
-- **File integrity verification**: AEAD mode (EAX) – MAC tag.
-- **Maximum file size**: EAX mode – 10 MB, CFB and OFB modes – 32 GB.
+### Passphrase mode
 
-![3DES](https://github.com/user-attachments/assets/f27a811b-6881-4608-bbc4-6e7f2cd2407b)
+Passphrases are generated from the **EFF Large Wordlist** using cryptographically secure randomness.
 
-![3DES 2](https://github.com/user-attachments/assets/e9f85a8a-e83a-4210-9f40-142394316903)
+Options include:
 
-### 🔹 **XChaCha20**
-- **Type:** Symmetric, stream cipher.
-- **Structure:** XOR operations on matrices and vectors.
-- **Key lengths (bits):** 256.
-- **File integrity verification**: Poly1305 authentication tag.
-- **Maximum file size**: practically unlimited (hundreds of TB to PB).
+- number of words,
+- uppercase formatting,
+- numeric suffix,
+- symbol separator.
 
-![XChaCha20](https://github.com/user-attachments/assets/cef22c90-5fcb-47ba-9531-128a6cd08bf8)
+The official EFF word list contains 7,776 entries and is bundled with the application.
 
-### 🔹 **Threefish**
-- **Type:** Symmetric, block cipher.
-- **Structure:** Modular and bitwise transformations.
-- **Key lengths (bits):** 256, 512, 1024.
-- **Modes:** Stream-like mode – XOR with keystream (similar to CTR – Counter).
-- **File integrity verification**: Skein-MAC tag, keys derived using HKDF (HMAC-based Key Derivation Function) with SHA-256 (Secure Hash Algorithm 256-bit), EtM scheme (Encrypt-then-MAC).
-- **Maximum file size**: practically unlimited (hundreds of TB to PB).
+> 📷 Screenshot placeholder — password generator
 
-![Threefish](https://github.com/user-attachments/assets/8ebe010e-92e5-4e83-b48a-d8b4574447e3)
+---
 
-![Threefish 2](https://github.com/user-attachments/assets/c9634ca0-ce75-4e2e-810c-345443ad4bb5)
+## 🔐 Asymmetric Keys
 
-### 🔹 **RSA (Rivest–Shamir–Adleman)**
-- **Type:** Asymmetric.
-- **Structure:** Based on the computational difficulty of factoring large prime numbers.
-- **Key lengths (bits):** 1024, 2048, 3072.
-- **Padding:** PKCS#1 v1.5 (Public-Key Cryptography Standards), OAEP (Optimal Asymmetric Encryption Padding).
-- **File integrity verification**: PSS signature (Probabilistic Signature Scheme) with SHA-256.
-- **Maximum file size**: 1 MB.
+Asymmetric algorithms use separate private and public key files where applicable.
 
-![RSA](https://github.com/user-attachments/assets/873cd11a-37b3-4ba4-9af4-b867220ef0f5)
+The application can generate private keys and derive/generate the corresponding public key.
 
-![RSA 2](https://github.com/user-attachments/assets/58e16bcc-928b-4c4f-a1c1-e38241a4f554)
+Supported asymmetric use cases include:
 
-![RSA 3](https://github.com/user-attachments/assets/b88c18db-b8bd-441f-b97b-0900ce8bca3f)
+- encryption/decryption,
+- digital signatures,
+- post-quantum key encapsulation.
+
+> 📷 Screenshot placeholder — private and public key files
+
+---
+
+# 🔢 Implemented Algorithms
+
+The application separates algorithms into two main groups:
+
+- **Encryption & KEM**
+- **Digital Signatures**
+
+> 📷 Screenshot placeholder — algorithm selection list
+
+---
+
+## 🔒 Symmetric Encryption
+
+### AES
+
+**Type:** Symmetric block cipher  
+**Standard:** NIST FIPS 197  
+**Block size:** 128 bits  
+**Key lengths:** 128, 192, 256 bits
+
+Supported modes:
+
+- **GCM (AEAD)** – authenticated encryption, streaming supported.
+- **EAX (AEAD)** – authenticated encryption, streaming supported.
+- **SIV (AEAD)** – misuse-resistant authenticated encryption, non-streaming in the current implementation. Uses 256, 384, or 512-bit SIV keys corresponding to AES-128, AES-192, or AES-256 internally.
+- **CCM (AEAD)** – authenticated encryption, non-streaming in the current implementation.
+- **OCB (AEAD)** – authenticated encryption, non-streaming in the current implementation.
+- **CTR** – counter mode, streaming supported, does not provide authentication by itself.
+- **CBC** – cipher block chaining, streaming supported, does not provide authentication by itself.
+- **ECB** – electronic codebook, streaming supported, does not provide authentication and does not hide repeating plaintext block patterns.
+
+For AEAD modes, the authentication tag is verified before decrypted data is committed to the final output. The encrypted file header is authenticated as associated data where supported by the mode.
+
+> 📷 Screenshot placeholder — AES settings and all available modes
+
+---
+
+### ASCON
+
+**Type:** Lightweight authenticated encryption algorithm  
+**Standard:** NIST SP 800-232  
+**Key length:** 128 bits
+
+Supported mode:
+
+- **Ascon-128 (AEAD)** – authenticated encryption, streaming supported.
+
+ASCON combines confidentiality and integrity in a lightweight permutation-based construction.
+
+> 📷 Screenshot placeholder — ASCON settings
+
+---
+
+### Serpent-HMAC
+
+**Type:** Symmetric block cipher with Encrypt-then-MAC authentication  
+**Family:** Serpent + HMAC  
+**Block size:** 128 bits  
+**Key lengths:** 128, 192, 256 bits
+
+Supported mode:
+
+- **CBC + HMAC-SHA256** – Serpent-CBC protected with HMAC-SHA256 using an Encrypt-then-MAC construction; streaming supported.
+
+The MAC is verified before decrypted plaintext is committed to the final output.
+
+> 📷 Screenshot placeholder — Serpent-HMAC settings
+
+---
+
+### Camellia
+
+**Type:** Symmetric block cipher  
+**Standard:** RFC 3713 / ISO/IEC 18033-3  
+**Block size:** 128 bits  
+**Key lengths:** 128, 192, 256 bits
+
+Supported modes:
+
+- **CFB** – cipher feedback mode, streaming supported.
+- **CBC** – cipher block chaining mode, streaming supported.
+
+These modes provide confidentiality but do not provide authentication by themselves.
+
+> 📷 Screenshot placeholder — Camellia settings and modes
+
+---
+
+### 3DES
+
+**Type:** Symmetric block cipher  
+**Status:** Legacy  
+**Standard:** NIST SP 800-67 (withdrawn)  
+**Block size:** 64 bits  
+**Key length:** 192 bits
+
+Supported modes:
+
+- **EAX (AEAD)** – authenticated encryption, streaming supported.
+- **CTR** – counter mode, streaming supported.
+- **CFB** – cipher feedback mode, streaming supported.
+- **OFB** – output feedback mode, streaming supported.
+
+Only EAX provides authentication by itself. 3DES is retained mainly for legacy and educational purposes.
+
+For password-based operation, the derived key parity is adjusted to meet 3DES key requirements.
+
+> 📷 Screenshot placeholder — 3DES settings and all available modes
+
+---
+
+### ChaCha20-Poly1305
+
+**Type:** Symmetric stream AEAD cipher  
+**Standard:** RFC 8439  
+**Key length:** 256 bits  
+**Streaming:** Supported
+
+ChaCha20 provides encryption while Poly1305 provides authentication and integrity verification.
+
+> 📷 Screenshot placeholder — ChaCha20-Poly1305 settings
+
+---
+
+### XChaCha20-Poly1305
+
+**Type:** Symmetric stream AEAD cipher  
+**Specification:** draft-irtf-cfrg-xchacha  
+**Key length:** 256 bits  
+**Streaming:** Supported
+
+XChaCha20-Poly1305 extends ChaCha20-Poly1305 with a larger nonce space while retaining authenticated encryption.
+
+> 📷 Screenshot placeholder — XChaCha20-Poly1305 settings
+
+---
+
+### Salsa20
+
+**Type:** Symmetric stream cipher  
+**Origin:** eSTREAM Portfolio  
+**Key length:** 256 bits  
+**Streaming:** Supported
+
+Salsa20 processes files incrementally and provides confidentiality. It does not provide authentication by itself.
+
+> 📷 Screenshot placeholder — Salsa20 settings
+
+---
+
+### Threefish-Skein-MAC
+
+**Type:** Tweakable block cipher with MAC authentication  
+**Origin:** Skein SHA-3 finalist  
+**Block/key sizes:** 256, 512, 1024 bits  
+**Streaming:** Supported
+
+Threefish is combined with Skein-MAC to provide integrity protection. The application uses an Encrypt-then-MAC construction with a separately derived authentication key.
+
+> 📷 Screenshot placeholder — Threefish-Skein-MAC settings
+
+---
+
+## 🔐 Asymmetric Encryption
+
+### RSA-OAEP
+
+**Type:** Asymmetric encryption  
+**Standard:** PKCS #1 v2.2 / RFC 8017  
+**Key lengths:** 2048, 3072, 4096 bits  
+**Streaming:** Supported by the application workflow
+
+Supported hash functions:
+
+- **SHA3-512**
+- **SHA3-384**
+- **SHA3-256**
+- **SHA-512**
+- **SHA-384**
+- **SHA-256**
+
+Encryption uses the public key and decryption uses the corresponding private key.
+
+> 📷 Screenshot placeholder — RSA-OAEP settings
+
+---
+
+## 🧬 Post-Quantum Key Encapsulation
+
+### ML-KEM
+
+**Type:** Post-quantum Key Encapsulation Mechanism (KEM)  
+**Standard:** NIST FIPS 203  
+**Family:** Module-lattice KEM  
+**Streaming:** Supported by the application workflow
+
+Supported parameter sets:
+
+- **ML-KEM-1024**
+- **ML-KEM-768**
+- **ML-KEM-512**
+
+ML-KEM establishes a shared secret that is then used by the file encryption workflow.
+
+> 📷 Screenshot placeholder — ML-KEM parameter set selection
+
+---
+
+# ✍️ Digital Signatures
+
+Digital signature algorithms are displayed separately from encryption and KEM algorithms.
+
+When a signature algorithm is selected, the primary operations change from **Encrypt / Decrypt** to **Sign / Verify**.
+
+Signature files use the `.sig` extension.
+
+---
+
+## RSA-PSS
+
+**Type:** RSA digital signature  
+**Standard:** NIST FIPS 186-5 / RFC 8017  
+**Key lengths:** 2048, 3072, 4096 bits  
+**Streaming:** Supported
+
+Supported hash functions:
+
+- **SHA3-512**
+- **SHA3-384**
+- **SHA3-256**
+- **SHA-512**
+- **SHA-384**
+- **SHA-256**
+
+> 📷 Screenshot placeholder — RSA-PSS settings
+
+---
+
+## EdDSA
+
+**Type:** Edwards-curve digital signature  
+**Standard:** RFC 8032  
+**Streaming:** Supported
+
+Supported curves:
+
+- **Ed25519**
+- **Ed448**
+
+> 📷 Screenshot placeholder — EdDSA curve selection
+
+---
+
+## ECDSA
+
+**Type:** Elliptic-curve digital signature  
+**Standard:** NIST FIPS 186-5  
+**Streaming:** Supported
+
+Supported curves:
+
+- **P-521 (secp521r1)**
+- **P-384 (secp384r1)**
+- **P-256 (secp256r1)**
+
+Supported hash functions:
+
+- **SHA3-512**
+- **SHA3-384**
+- **SHA3-256**
+- **SHA-512**
+- **SHA-384**
+- **SHA-256**
+
+> 📷 Screenshot placeholder — ECDSA curve and hash selection
+
+---
+
+## ML-DSA
+
+**Type:** Post-quantum digital signature  
+**Standard:** NIST FIPS 204  
+**Family:** Module-lattice signature  
+**Streaming:** Not supported by the current implementation
+
+Supported parameter sets:
+
+- **ML-DSA-87**
+- **ML-DSA-65**
+- **ML-DSA-44**
+
+> 📷 Screenshot placeholder — ML-DSA parameter set selection
+
+---
+
+## SLH-DSA
+
+**Type:** Post-quantum stateless hash-based digital signature  
+**Standard:** NIST FIPS 205  
+**Streaming:** Not supported by the current implementation
+
+Supported parameter sets:
+
+- **SLH-DSA-SHAKE-256s**
+- **SLH-DSA-SHAKE-256f**
+- **SLH-DSA-SHA2-256s**
+- **SLH-DSA-SHA2-256f**
+- **SLH-DSA-SHAKE-192s**
+- **SLH-DSA-SHAKE-192f**
+- **SLH-DSA-SHA2-192s**
+- **SLH-DSA-SHA2-192f**
+- **SLH-DSA-SHAKE-128s**
+- **SLH-DSA-SHAKE-128f**
+- **SLH-DSA-SHA2-128s**
+- **SLH-DSA-SHA2-128f**
+
+> 📷 Screenshot placeholder — SLH-DSA parameter set selection
+
+---
+
+## 📦 Encrypted File Format
+
+Encrypted files use the `.enc` extension.
+
+Each encrypted file contains an application metadata header describing the algorithm and parameters required to interpret the encrypted payload.
+
+Example metadata may include:
+
+- algorithm name,
+- cipher mode,
+- key length,
+- hash function,
+- padding,
+- elliptic curve,
+- post-quantum parameter set,
+- key source,
+- password KDF name,
+- password KDF salt,
+- password KDF parameters.
+
+When a `.enc` file is selected, the application can automatically restore supported algorithm settings from the stored metadata.
+
+This reduces the risk of attempting decryption with mismatched parameters.
+
+> 📷 Screenshot placeholder — encrypted file metadata / automatic configuration
+
+---
+
+## 🛡️ Data Integrity & Authentication
+
+Depending on the selected algorithm, integrity verification is provided by:
+
+- AEAD authentication tags,
+- MACs,
+- Encrypt-then-MAC constructions,
+- digital signatures.
+
+For authenticated encryption modes, tampering with the encrypted payload or authenticated metadata causes decryption to fail.
+
+Unauthenticated plaintext is not written directly to the final destination before authentication succeeds. Authenticated decryption uses temporary buffering and only commits the output after successful verification.
+
+> 📷 Screenshot placeholder — integrity verification error
+
+---
+
+## 📚 Streaming & Large File Processing
+
+Supported algorithms process files incrementally instead of loading the entire file into memory.
+
+The application uses chunked I/O for supported encryption, decryption, signing, and verification operations.
+
+Benefits include:
+
+- lower memory usage,
+- support for large files,
+- responsive progress reporting,
+- operation cancellation during processing.
+
+Temporary output files are used during cryptographic operations. The final output replaces the temporary file only after the operation completes successfully.
+
+This prevents incomplete or cancelled operations from leaving a partially written final file.
 
 ---
 
 ## 🗑️ Secure File Deletion
 
-The system includes a mechanism for secure deletion of the original unencrypted file after encryption, adapted to the type of storage device with automatic detection (Windows). Secure deletion is optional and controlled from the GUI.
+The application includes optional secure deletion of source files after successful encryption or decryption.
 
-![Deletion](https://github.com/user-attachments/assets/a5e11866-935d-4423-b323-399a1ce23d8b)
+### HDD
 
-### 🔹 **HDD (Hard Disk Drives)**
-- The file is overwritten twice with random data in blocks of ~4 MiB. After each write operation, flush() and os.fsync() are executed to force writing to the storage device.
-- A crypto-erase mechanism is used: a temporary file is created in the same directory, to which the original file is streamed and encrypted with a random key (AES-GCM, 256-bit key, 96-bit nonce) in ~1 MiB blocks. Each block is flushed and synchronized using fsync(). After encryption is completed, the key is securely wiped from memory. The temporary file replaces the original (os.replace), and the encrypted file is then deleted.
+For traditional hard disk drives, the application can perform overwrite passes before deleting the file.
 
-### 🔹 **SSD (Solid-State Drives)**
-- Due to wear-leveling, overwriting does not guarantee physical data removal. Therefore, the crypto-erase method described above is primarily used.
-- If available and enabled, the application attempts to invoke TRIM / Optimize-Volume (PowerShell) to release storage blocks (Windows).
+### SSD
 
----
+For SSDs, traditional overwrite techniques cannot guarantee physical data removal because of wear leveling and controller behavior.
 
-## 📂 Additional Features
+The application therefore uses storage-aware handling and may use crypto-erase-style techniques and supported system optimization mechanisms where applicable.
 
-Preview of file paths and file sizes as well as key paths, with the ability to open the file or key location by double-clicking.
-
-![Preview](https://github.com/user-attachments/assets/3498f8d0-9ea5-4b63-a977-5228fa6f7836)
-
-Possibility to delete selected files and keys.
-
-![Preview 2](https://github.com/user-attachments/assets/ac8f28d3-3769-4f0c-9330-d4e70405677d)
-
-![Preview 3](https://github.com/user-attachments/assets/da0897e8-b38b-4ff8-ad85-717fad505e2e)
-
-History of recently used files and keys.
-
-![Preview 4](https://github.com/user-attachments/assets/ed4cba93-654f-4060-8520-b928dbab65d7)
-
-Drag and drop support for files and keys directly into the appropriate fields in the GUI.
-
-![Preview 5](https://github.com/user-attachments/assets/c1028026-34cd-4589-b1fe-27d0b1bb4a30)
+> 📷 Screenshot placeholder — secure deletion settings
 
 ---
 
-## ⚙️ Encryption / Decryption
+## 📂 File & Key Management
 
-Encrypted files use the `.enc` extension.
+The application includes:
 
-![Encryption](https://github.com/user-attachments/assets/016528f5-c610-40fa-bb58-e320fa2cbead)
+- file path preview,
+- file size display,
+- key path preview,
+- double-click to open file/key location,
+- clear buttons,
+- drag and drop,
+- separate history for files and different key types,
+- individual history item removal,
+- configurable history limit.
 
-An integrity verification error is displayed during decryption if the encrypted file has been modified.
+> 📷 Screenshot placeholder — file and key paths
 
-![Encryption 2](https://github.com/user-attachments/assets/15a0d35f-1e28-437e-b2e4-24b5d2ebd013)
+> 📷 Screenshot placeholder — recent file/key history
 
----
-
-## ⏳ Functional Progress Bar
-
-The encryption/decryption operation can be cancelled at any time.
-
-![Progress Bar](https://github.com/user-attachments/assets/b844c800-656c-471c-86d6-a294c0ff86f5)
-
-The progress bar displays graphical and percentage progress along with ETA (Estimated Time of Arrival) — the estimated time remaining until the operation is completed.
-
-![Progress Bar 2](https://github.com/user-attachments/assets/042cd932-cafa-445a-935b-58d618f007c1)
-
-Integration of the progress bar with the Windows taskbar.
-
-![Progress Bar 3](https://github.com/user-attachments/assets/4cfb24a2-45d5-4de5-9933-58d4be05b996)
+> 📷 Screenshot placeholder — drag and drop
 
 ---
 
-## 🧰 Requirements and Dependency Installation
+## ⚙️ Encryption / Decryption Workflow
 
-### 🔹 **Required libraries**
+Typical encryption workflow:
 
-- `PyQt5` - graphical user interface.
-- `PyCryptodome` - cryptographic algorithms.
-- `PySkein` - Skein cryptographic primitive.
-- `psutil` - system resource monitoring.
+1. Select a source file.
+2. Select an encryption algorithm.
+3. Configure algorithm parameters.
+4. Select a key file or password where supported.
+5. Start encryption.
+6. The application writes a `.enc` file containing the required metadata and encrypted payload.
 
-### 🔹 **Building the executable file**
+Typical decryption workflow:
 
-  - `PyInstaller` - tool for creating `.exe` files.
+1. Select a `.enc` file.
+2. The application reads stored metadata.
+3. Supported algorithm parameters are restored automatically.
+4. Provide the required key or password.
+5. Start decryption.
+6. Integrity is verified before the final output is committed.
 
-  Build command:
-  ``` bash
-  pyinstaller --onefile --windowed --icon=icon.ico --name="File Encryption and Decryption" --add-data="icon.ico;." "main.py"
-  ```
-  
-  Install PyInstaller:
-  ```bash
-  pip install PyInstaller==6.18.0
-  ```
+> 📷 Screenshot placeholder — encryption workflow
 
-### 🔹 **Installing dependencies**
-  You can install them individually with specific versions:
-  ```bash
-  pip install PyQt5==5.15.11 PyCryptodome==3.23.0 PySkein==1.0 psutil==7.2.2
-  ```
+> 📷 Screenshot placeholder — decryption workflow
 
-  Or using `requirements.txt`:
-  ```bash
-  pip install -r requirements.txt
-  ```
+---
+
+## ✍️ Sign / Verify Workflow
+
+Typical signing workflow:
+
+1. Select a source file.
+2. Select a digital signature algorithm.
+3. Select the private key.
+4. Create the signature.
+5. Save the generated `.sig` file.
+
+Typical verification workflow:
+
+1. Select the original file.
+2. Select the signature file.
+3. Select the public key.
+4. Run verification.
+5. The application reports whether the signature is valid.
+
+> 📷 Screenshot placeholder — signing workflow
+
+> 📷 Screenshot placeholder — signature verification
+
+---
+
+## ⏳ Progress, ETA & Cancellation
+
+Long-running cryptographic operations report progress through the application progress bar.
+
+The GUI provides:
+
+- percentage progress,
+- ETA,
+- cancellation,
+- Windows taskbar progress integration,
+- error indication on failed operations.
+
+Cancellation is checked during chunked processing.
+
+> 📷 Screenshot placeholder — active encryption progress
+
+> 📷 Screenshot placeholder — Windows taskbar progress
+
+---
+
+## 🌐 Languages
+
+The application currently supports:
+
+- English
+- Polish
+
+Translations are stored in JSON files and loaded dynamically.
+
+The selected language is persisted using application settings.
+
+> 📷 Screenshot placeholder — language selection
+
+---
+
+## 🎨 Theme System
+
+Built-in themes:
+
+- Light
+- Dark
+
+Additional custom themes can be discovered from `.qss` files in the theme directory.
+
+Current custom themes include:
+
+- Neon Green
+- Arctic Cyan
+- Shadow Monarch
+- Windows 11
+
+The GUI recalculates layout geometry when the active theme changes so themes can safely use different fonts, paddings, borders, and control sizes.
+
+> 📷 Screenshot placeholder — theme selection
+
+---
+
+## ⚙️ Settings
+
+Application settings include options related to:
+
+- interface language,
+- application theme,
+- system theme following,
+- secure deletion behavior,
+- overwrite passes,
+- history size.
+
+Settings are persisted using `QSettings`.
+
+> 📷 Screenshot placeholder — settings dialog
+
+---
+
+## 🧰 Requirements & Installation
+
+### Python
+
+Python 3.12 is recommended.
+
+### Install dependencies
+
+Install dependencies from `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run from source
+
+```bash
+python main.py
+```
+
+---
+
+## 📦 Building the Windows Application
+
+PyInstaller can be used to create the Windows application.
+
+Example build command:
+
+```bash
+python -m PyInstaller --windowed --icon="assets/icon.ico" --name="File Encryption & Decryption" --add-data="assets/icon.ico;assets" --add-data="resources/eff_large_wordlist.txt;resources" "main.py"
+```
+
+The EFF word list is bundled with the application through PyInstaller.
+
+The `lang` and `theme` directories can remain external so translations and custom QSS themes can be modified or extended without rebuilding the executable.
+
+A release build script may copy them next to the generated executable before creating the final ZIP archive.
+
+---
+
+## 📁 Project Structure
+
+```text
+file-encryption-system/
+├── algorithms/
+│   ├── base.py
+│   ├── registry.py
+│   ├── aes.py
+│   ├── ascon.py
+│   ├── serpent.py
+│   ├── camellia.py
+│   ├── des3.py
+│   ├── chacha20.py
+│   ├── salsa20.py
+│   ├── threefish.py
+│   ├── rsa.py
+│   ├── eddsa.py
+│   ├── ecdsa.py
+│   ├── ml_kem.py
+│   ├── ml_dsa.py
+│   └── slh_dsa.py
+├── gui/
+│   ├── main_window.py
+│   ├── widgets.py
+│   ├── algorithm_info.py
+│   ├── settings_dialog.py
+│   ├── history_manager.py
+│   ├── language_manager.py
+│   ├── theme_manager.py
+│   └── password_generator_dialog.py
+├── resources/
+│   └── eff_large_wordlist.txt
+├── theme/
+├── lang/
+├── crypto_worker.py
+├── key_generation_worker.py
+├── file_format.py
+├── key_manager.py
+├── password_kdf.py
+├── password_generator.py
+└── main.py
+```
 
 ---
 
 ## 🧠 Future Improvements
 
-- ...
+Possible future development directions include:
+
+- Additional AEAD and post-quantum algorithms.
+- More advanced nonce, IV, authentication tag, and KDF configuration.
+- Additional password KDFs such as scrypt.
+- Detached-signature workflow improvements and additional signature formats.
+- Further optimization of streaming operations for very large files.
+- Additional file format versioning and backward-compatibility mechanisms.
+- Expanded automated tests for cryptographic operations and file format handling.
+- More custom themes and accessibility options.
+- Additional languages.
+- Improved packaging and cross-platform distribution.
+- Further separation of GUI, cryptographic, file-format, and utility layers.
 
 ---
 
 ## 📄 License
 
-This project is for educational and portfolio purposes.
+Copyright © 2026 Michał Rusek. All rights reserved.
+
+The source code is publicly available for viewing and educational purposes.
+Commercial use, redistribution, sublicensing, and distribution of modified
+versions are not permitted without prior written permission.
+
+See the [LICENSE](LICENSE) file for details.
 
 ---
 
