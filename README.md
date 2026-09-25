@@ -852,11 +852,17 @@ Possible future development directions include:
 
 Copyright © 2026 Michał Rusek. All rights reserved.
 
-The source code is publicly available for viewing and educational purposes.
+Except where otherwise noted, the source code is publicly available for
+personal, non-commercial, and educational purposes only.
+
 Commercial use, redistribution, sublicensing, and distribution of modified
 versions are not permitted without prior written permission.
 
-See the [LICENSE](LICENSE) file for details.
+Third-party components remain subject to their respective licenses.
+
+See the [LICENSE](LICENSE) file for the project license and
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for third-party licensing
+information.
 
 ---
 

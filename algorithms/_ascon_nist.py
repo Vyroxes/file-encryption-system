@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+# Based on the pyascon reference implementation:
+# https://github.com/meichlseder/pyascon
+# Licensed under CC0 1.0 Universal.
+
 """
 Implementation of Ascon, an authenticated cipher and hash function
 NIST SP 800-232

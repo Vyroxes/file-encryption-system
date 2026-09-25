@@ -852,11 +852,17 @@ Możliwe kierunki dalszego rozwoju:
 
 Copyright © 2026 Michał Rusek. Wszelkie prawa zastrzeżone.
 
-Kod źródłowy jest publicznie dostępny wyłącznie do przeglądania oraz celów edukacyjnych.
-Użycie komercyjne, redystrybucja, sublicencjonowanie oraz rozpowszechnianie zmodyfikowanych
-wersji są zabronione bez uprzedniej pisemnej zgody autora.
+O ile nie zaznaczono inaczej, kod źródłowy jest publicznie dostępny wyłącznie
+do użytku prywatnego, niekomercyjnego oraz edukacyjnego.
 
-Szczegóły znajdują się w pliku [LICENSE](LICENSE).
+Użycie komercyjne, redystrybucja, sublicencjonowanie oraz rozpowszechnianie
+zmodyfikowanych wersji są zabronione bez uprzedniej pisemnej zgody autora.
+
+Komponenty zewnętrzne podlegają własnym licencjom.
+
+Szczegóły dotyczące licencji projektu znajdują się w pliku
+[LICENSE](LICENSE), a informacje o licencjach komponentów zewnętrznych w
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ---
 

@@ -1,20 +1,62 @@
-Copyright (c) 2026 Michał Rusek
-All rights reserved.
+Copyright © 2026 Michał Rusek. All rights reserved.
 
-This software and its source code are provided for viewing and educational
-purposes only.
+FILE ENCRYPTION SYSTEM LICENSE
 
-You may not, without prior written permission from the copyright holder:
+1. Scope
+
+Except where otherwise noted, the source code and other original content in
+this repository are copyright © 2026 Michał Rusek and are made available
+under the terms of this license.
+
+Third-party components included in this repository remain subject to their
+respective licenses and are not covered by the restrictions of this license.
+
+2. Permitted Use
+
+You may view, download, run, study, and privately modify this software solely
+for personal, non-commercial, and educational purposes.
+
+3. Restrictions
+
+Without prior written permission from the copyright holder, you may not:
 
 - use this software or any substantial part of it for commercial purposes;
-- redistribute, publish, sublicense, sell, or otherwise make copies of this
-  software available to third parties;
-- incorporate this software or substantial portions of it into another
-  distributed product or service;
-- distribute modified or derivative versions of this software.
+- sell, rent, sublicense, monetize, or otherwise commercially exploit this
+  software;
+- redistribute, republish, or otherwise make copies of this software available
+  to third parties;
+- distribute, publish, or otherwise make available modified or derivative
+  versions of this software;
+- incorporate this software or substantial portions of it into another product,
+  service, application, or project that is distributed or made available to
+  third parties;
+- remove or alter copyright, license, or attribution notices that apply to this
+  software or to third-party components.
 
-Permission to use, copy, modify, or distribute this software may be granted
-separately in writing by the copyright holder.
+4. Permission for Other Uses
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED.
+Permission for commercial use, redistribution, sublicensing, publication of
+modified versions, or other uses not expressly permitted by this license may be
+granted separately in writing by the copyright holder.
+
+5. Third-Party Components
+
+Third-party libraries, source code, resources, and other components included
+in or used by this project are not covered by the restrictions of this
+license. They remain subject to their respective original licenses.
+
+Information about third-party components included directly in this repository
+and their applicable licenses is provided in:
+
+THIRD_PARTY_LICENSES.md
+
+6. No Warranty
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.
