@@ -781,8 +781,6 @@ The EFF word list is bundled with the application through PyInstaller.
 
 The `lang` and `theme` directories can remain external so translations and custom QSS themes can be modified or extended without rebuilding the executable.
 
-A release build script may copy them next to the generated executable before creating the final ZIP archive.
-
 ---
 
 ## 📁 Project Structure

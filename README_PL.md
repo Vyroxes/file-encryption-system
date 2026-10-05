@@ -781,8 +781,6 @@ Lista słów EFF jest dołączana do aplikacji przez PyInstaller.
 
 Katalogi `lang` i `theme` mogą pozostać zewnętrzne, dzięki czemu tłumaczenia i własne motywy QSS można modyfikować lub rozszerzać bez ponownego budowania pliku wykonywalnego.
 
-Skrypt release/build może skopiować je obok wygenerowanej aplikacji przed utworzeniem końcowego archiwum ZIP.
-
 ---
 
 ## 📁 Struktura projektu
